@@ -146,6 +146,17 @@ async def top_artists(
     )
 
 
+async def artist_id_for(ctx: AbstractContext, artist_name: str) -> int:
+    """Returns the artist with this name, creating a bare one when unknown."""
+
+    artist = await ctx.artists.find_by_name(artist_name)
+
+    if artist is not None:
+        return artist.id
+
+    return await ctx.artists.create(artist_name, "", "")
+
+
 async def create_custom(
     ctx: AbstractContext,
     *,
@@ -158,16 +169,9 @@ async def create_custom(
     if not name.strip() or not artist_name.strip() or not url.startswith("http"):
         return SongError.INVALID
 
-    artist = await ctx.artists.find_by_name(artist_name.strip())
-    artist_id = (
-        await ctx.artists.create(artist_name.strip(), "", "")
-        if artist is None
-        else artist.id
-    )
-
     song_id = await ctx.songs.create_custom(
         name=name.strip(),
-        artist_id=artist_id,
+        artist_id=await artist_id_for(ctx, artist_name.strip()),
         size_bytes=size_bytes,
         url=url,
         uploaded_by_user_id=uploaded_by_user_id,

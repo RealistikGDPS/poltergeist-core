@@ -247,6 +247,27 @@ class SongRepository:
 
         return result.last_row_id
 
+    async def update(
+        self,
+        song_id: int,
+        *,
+        name: str,
+        artist_id: int,
+        size_bytes: int,
+        url: str,
+    ) -> None:
+        await self._mysql.execute(
+            "UPDATE songs SET name = %(name)s, artist_id = %(artist)s, "
+            "size_bytes = %(size)s, url = %(url)s WHERE id = %(id)s",
+            {
+                "id": song_id,
+                "name": name,
+                "artist": artist_id,
+                "size": size_bytes,
+                "url": url,
+            },
+        )
+
     async def set_disabled(self, song_id: int, *, disabled: bool) -> None:
         await self._mysql.execute(
             "UPDATE songs SET disabled_at = %(at)s WHERE id = %(id)s",

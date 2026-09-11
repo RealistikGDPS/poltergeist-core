@@ -11,6 +11,7 @@ from gdformat.enums import Visibility
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import Role
+from poltergeist_core.services import songs
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 from poltergeist_core.utilities import logging
@@ -21,6 +22,9 @@ logger = logging.get_logger(__name__)
 _USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9 _-]{3,20}$")
 _ROLE_NAME_PATTERN = re.compile(r"^[a-z0-9_]{2,32}$")
 _REWARD_KEY_PATTERN = re.compile(r"^[a-z0-9_-]{2,64}$")
+_SONG_NAME_LENGTH = 128
+_ARTIST_NAME_LENGTH = 64
+_SONG_URL_LENGTH = 512
 
 
 class AdministrationError(ServiceError, StrEnum):
@@ -230,6 +234,59 @@ async def set_song_disabled(
 
     await ctx.mod_actions.create(
         actor_user_id, "disable", ModTarget.SONG, song_id, {"disabled": disabled}
+    )
+
+    return None
+
+
+async def update_song(
+    ctx: AbstractContext,
+    *,
+    actor_user_id: int,
+    song_id: int,
+    name: str,
+    artist_name: str,
+    url: str,
+    size_bytes: int,
+) -> AdministrationError.OnSuccess[None]:
+    """Applies to any known song, so a dead upstream URL can be replaced."""
+
+    refused = await _require(ctx, actor_user_id, Permission.SONGS_MANAGE)
+
+    if refused is not None:
+        return refused
+
+    name = name.strip()
+    artist_name = artist_name.strip()
+    url = url.strip()
+
+    if not name or not artist_name or not url.startswith("http") or size_bytes <= 0:
+        return AdministrationError.INVALID
+
+    if (
+        len(name) > _SONG_NAME_LENGTH
+        or len(artist_name) > _ARTIST_NAME_LENGTH
+        or len(url) > _SONG_URL_LENGTH
+    ):
+        return AdministrationError.INVALID
+
+    if await ctx.songs.find_by_id(song_id) is None:
+        return AdministrationError.NOT_FOUND
+
+    await ctx.songs.update(
+        song_id,
+        name=name,
+        artist_id=await songs.artist_id_for(ctx, artist_name),
+        size_bytes=size_bytes,
+        url=url,
+    )
+
+    await ctx.mod_actions.create(
+        actor_user_id,
+        "update",
+        ModTarget.SONG,
+        song_id,
+        {"name": name, "artist": artist_name, "url": url, "size_bytes": size_bytes},
     )
 
     return None
