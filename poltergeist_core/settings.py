@@ -1,0 +1,31 @@
+import os
+
+APP_PUBLIC_URL = os.environ["APP_PUBLIC_URL"].rstrip("/")
+APP_SERVER_NAME = os.environ["APP_SERVER_NAME"]
+APP_COMMAND_PREFIX = os.environ["APP_COMMAND_PREFIX"]
+APP_MIN_GAME_VERSION = int(os.environ["APP_MIN_GAME_VERSION"])
+APP_MIN_BINARY_VERSION = int(os.environ["APP_MIN_BINARY_VERSION"])
+APP_CUSTOM_CONTENT_URL = os.environ["APP_CUSTOM_CONTENT_URL"]
+APP_LEVEL_MAX_BYTES = int(os.environ["APP_LEVEL_MAX_BYTES"])
+APP_SAVE_MAX_BYTES = int(os.environ["APP_SAVE_MAX_BYTES"])
+APP_SMALL_CHEST_SECONDS = int(os.environ["APP_SMALL_CHEST_SECONDS"])
+APP_LARGE_CHEST_SECONDS = int(os.environ["APP_LARGE_CHEST_SECONDS"])
+APP_SESSION_SECONDS = int(os.environ["APP_SESSION_SECONDS"])
+APP_STORAGE_PATH = os.environ["APP_STORAGE_PATH"]
+# An empty key means the administration API is switched off.
+APP_ADMIN_API_KEY = os.environ["APP_ADMIN_API_KEY"]
+
+BOOMLINGS_URL = os.environ["BOOMLINGS_URL"].rstrip("/")
+BOOMLINGS_TIMEOUT_SECONDS = float(os.environ["BOOMLINGS_TIMEOUT_SECONDS"])
+
+MYSQL_HOST = os.environ["MYSQL_HOST"]
+MYSQL_TCP_PORT = int(os.environ["MYSQL_TCP_PORT"])
+MYSQL_USER = os.environ["MYSQL_USER"]
+MYSQL_PASSWORD = os.environ["MYSQL_PASSWORD"]
+MYSQL_DATABASE = os.environ["MYSQL_DATABASE"]
+MYSQL_POOL_MIN = int(os.environ["MYSQL_POOL_MIN"])
+MYSQL_POOL_MAX = int(os.environ["MYSQL_POOL_MAX"])
+
+REDIS_HOST = os.environ["REDIS_HOST"]
+REDIS_PORT = int(os.environ["REDIS_PORT"])
+REDIS_DATABASE = int(os.environ["REDIS_DATABASE"])
