@@ -10,12 +10,14 @@ from gdformat.enums import LeaderboardStat
 from gdformat.enums import LeaderboardType
 from gdformat.enums import Length
 from gdformat.enums import ModAccess
+from gdformat.enums import ModLevel
 from gdformat.requests import LeaderboardRequest
 from gdformat.requests import UpdateStatsRequest
 
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import LeaderboardKind
 from poltergeist_core.resources import Permission
+from poltergeist_core.resources import Role
 from poltergeist_core.resources import StatsUpdate
 from poltergeist_core.resources import User
 from poltergeist_core.resources import UserKind
@@ -60,6 +62,32 @@ class UserError(ServiceError, StrEnum):
 class UserSearchPayload:
     users: list[objects.UserPreview]
     page: objects.Page
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProfile:
+    """A profile as anyone may see it: no friend state, no notifications."""
+
+    user: User
+    stats: UserStats
+    ranks: dict[LeaderboardKind, int]
+    roles: list[Role]
+    mod_level: ModLevel
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardEntry:
+    rank: int
+    user: User
+    stats: UserStats
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardPage:
+    entries: list[LeaderboardEntry]
+    page: int
+    size: int
+    total: int
 
 
 async def _friend_state(
@@ -460,3 +488,50 @@ async def find_by_reference(ctx: AbstractContext, reference: str) -> User | None
         return await ctx.users.find_by_id(int(reference))
 
     return await ctx.users.find_by_username(reference)
+
+
+async def public_profile(
+    ctx: AbstractContext, user_id: int
+) -> UserError.OnSuccess[PublicProfile]:
+    user = await ctx.users.find_by_id(user_id)
+
+    if user is None:
+        return UserError.NOT_FOUND
+
+    stats = await ctx.stats.find_by_user_id(user.id)
+
+    if stats is None:
+        return UserError.NOT_FOUND
+
+    granted = await ctx.permissions.effective(user.id)
+
+    return PublicProfile(
+        user=user,
+        stats=stats,
+        ranks=await ctx.leaderboards.ranks_of(user.id),
+        roles=await ctx.roles.list_by_user(user.id),
+        mod_level=_badges.mod_level(granted),
+    )
+
+
+async def public_leaderboard(
+    ctx: AbstractContext, kind: LeaderboardKind, *, page: int, size: int
+) -> LeaderboardPage:
+    size = min(max(size, 1), _LEADERBOARD_MAX)
+    page = max(page, 0)
+    user_ids = await ctx.leaderboards.page(kind, page, size)
+    total = await ctx.leaderboards.count(kind)
+    users = {user.id: user for user in await ctx.users.find_many_by_ids(user_ids)}
+    stats = {
+        entry.user_id: entry
+        for entry in await ctx.stats.find_many_by_user_ids(user_ids)
+    }
+    entries = [
+        LeaderboardEntry(
+            rank=page * size + index + 1, user=users[user_id], stats=stats[user_id]
+        )
+        for index, user_id in enumerate(user_ids)
+        if user_id in users and user_id in stats
+    ]
+
+    return LeaderboardPage(entries=entries, page=page, size=size, total=total)

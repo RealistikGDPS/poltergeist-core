@@ -45,8 +45,10 @@ from poltergeist_core.resources import StarVoteRepository
 from poltergeist_core.resources import StatsRepository
 from poltergeist_core.resources import SuggestionRepository
 from poltergeist_core.resources import TimelyRepository
+from poltergeist_core.resources import UsernameChangeRepository
 from poltergeist_core.resources import UserQuestRepository
 from poltergeist_core.resources import UserRepository
+from poltergeist_core.resources import WebSessionRepository
 
 GD_FAILURE = -1
 
@@ -107,7 +109,11 @@ class AbstractContext(ABC):
 
     @property
     def analytics(self) -> AnalyticsRepository:
-        return AnalyticsRepository(self._mysql)
+        return AnalyticsRepository(self._mysql, self._redis)
+
+    @property
+    def username_changes(self) -> UsernameChangeRepository:
+        return UsernameChangeRepository(self._mysql)
 
     @property
     def credentials(self) -> CredentialRepository:
@@ -252,6 +258,10 @@ class AbstractContext(ABC):
     @property
     def sessions(self) -> SessionRepository:
         return SessionRepository(self._redis)
+
+    @property
+    def web_sessions(self) -> WebSessionRepository:
+        return WebSessionRepository(self._redis)
 
     @property
     def rate_limits(self) -> RateLimitRepository:

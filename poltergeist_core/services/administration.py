@@ -70,7 +70,9 @@ async def rename_user(
     if not _USERNAME_PATTERN.match(username):
         return AdministrationError.INVALID
 
-    if await ctx.users.find_by_id(user_id) is None:
+    user = await ctx.users.find_by_id(user_id)
+
+    if user is None:
         return AdministrationError.NOT_FOUND
 
     existing = await ctx.users.find_by_username(username)
@@ -79,6 +81,9 @@ async def rename_user(
         return AdministrationError.TAKEN
 
     await ctx.users.update_username(user_id, username)
+    await ctx.username_changes.create(
+        user_id, user.username, username, changed_by_user_id=actor_user_id
+    )
 
     await ctx.mod_actions.create(
         actor_user_id, "rename", ModTarget.USER, user_id, {"username": username}
@@ -116,6 +121,7 @@ async def revoke_sessions(
         return refused
 
     await ctx.sessions.revoke(user_id)
+    await ctx.web_sessions.revoke_all(user_id)
     await ctx.permissions.invalidate(user_id)
     await ctx.mod_actions.create(
         actor_user_id, "revoke_sessions", ModTarget.USER, user_id

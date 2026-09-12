@@ -317,6 +317,7 @@ async def ban(
     match ban_type:
         case BanType.ACCOUNT:
             await ctx.sessions.revoke(target_user_id)
+            await ctx.web_sessions.revoke_all(target_user_id)
         case BanType.LEADERBOARD | BanType.CREATOR:
             await users.sync_leaderboards(ctx, target_user_id)
         case _:

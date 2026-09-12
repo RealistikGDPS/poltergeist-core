@@ -1,9 +1,13 @@
 from datetime import date
+from datetime import datetime
 from datetime import timedelta
 
 from poltergeist_core.adapters.mysql import ImplementsMySQL
+from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import Model
 from poltergeist_core.utilities import clock
+
+_SNAPSHOT_KEY = "analytics:snapshot"
 
 
 class Totals(Model):
@@ -37,13 +41,34 @@ class CreatorRow(Model):
     creator_points: int
 
 
+class Snapshot(Model):
+    """The public statistics page, built once and served from the cache."""
+
+    totals: Totals
+    registrations: list[DailyCount]
+    uploads: list[DailyCount]
+    active_users: list[DailyCount]
+    difficulties: list[LabelCount]
+    top_creators: list[CreatorRow]
+    generated_at: datetime
+
+
 class AnalyticsRepository:
-    """Aggregate queries for the administration panel."""
+    """Aggregate queries for the administration panel and the public site."""
 
-    __slots__ = ("_mysql",)
+    __slots__ = ("_mysql", "_redis")
 
-    def __init__(self, mysql: ImplementsMySQL) -> None:
+    def __init__(self, mysql: ImplementsMySQL, redis: RedisClient) -> None:
         self._mysql = mysql
+        self._redis = redis
+
+    async def find_snapshot(self) -> Snapshot | None:
+        stored = await self._redis.get(_SNAPSHOT_KEY)
+
+        return None if stored is None else Snapshot.model_validate_json(str(stored))
+
+    async def store_snapshot(self, snapshot: Snapshot, *, seconds: int) -> None:
+        await self._redis.set(_SNAPSHOT_KEY, snapshot.model_dump_json(), ex=seconds)
 
     async def totals(self) -> Totals:
         row = await self._mysql.fetch_one(

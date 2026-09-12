@@ -28,6 +28,7 @@ from poltergeist_core.resources import LevelOrder
 from poltergeist_core.resources import LevelSearch
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.resources import User
 from poltergeist_core.services import _wire
 from poltergeist_core.services import songs
 from poltergeist_core.services._common import AbstractContext
@@ -56,6 +57,7 @@ _LEVEL_KEY = "levels/{level_id}.dat"
 _REPLAY_KEY = "replays/{level_id}.dat"
 _ID_SEPARATOR = ","
 _MAX_STAR_VOTE = 10
+_PUBLIC_PAGE_MAX = 50
 
 
 class LevelError(ServiceError, StrEnum):
@@ -92,6 +94,17 @@ class SearchPayload:
     creators: list[objects.UserRef]
     songs: list[objects.Song]
     page: objects.Page
+
+
+@dataclass(frozen=True, slots=True)
+class LevelListing:
+    """A public listing with its creators, for pages outside the game."""
+
+    levels: list[Level]
+    creators: dict[int, User]
+    page: int
+    size: int
+    total: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -760,3 +773,41 @@ async def rate_stars(
     await ctx.star_votes.upsert(level.id, session.user.id, request.stars)
 
     return None
+
+
+async def _public_listing(ctx: AbstractContext, search: LevelSearch) -> LevelListing:
+    levels = await ctx.levels.search(search)
+    total = await ctx.levels.count(search)
+    creators = await ctx.users.find_many_by_ids(
+        list({level.user_id for level in levels})
+    )
+
+    return LevelListing(
+        levels=levels,
+        creators={creator.id: creator for creator in creators},
+        page=search.page,
+        size=search.size,
+        total=total,
+    )
+
+
+def _public_search(order: LevelOrder, page: int, size: int) -> LevelSearch:
+    """Without a viewer only public levels match, which is what an anonymous
+    reader may see."""
+
+    return LevelSearch(
+        order=order,
+        page=max(page, 0),
+        size=min(max(size, 1), _PUBLIC_PAGE_MAX),
+        player_creators_only=True,
+    )
+
+
+async def recent(ctx: AbstractContext, *, page: int, size: int) -> LevelListing:
+    return await _public_listing(ctx, _public_search(LevelOrder.UPLOADED, page, size))
+
+
+async def featured(ctx: AbstractContext, *, page: int, size: int) -> LevelListing:
+    return await _public_listing(
+        ctx, replace(_public_search(LevelOrder.FEATURED, page, size), featured=True)
+    )

@@ -1,6 +1,8 @@
 import asyncio
 import re
 from dataclasses import dataclass
+from datetime import datetime
+from datetime import timedelta
 from enum import StrEnum
 from http import HTTPStatus
 
@@ -15,9 +17,11 @@ from gdformat.requests import RegisterRequest
 from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import User
+from poltergeist_core.resources import UserCredential
 from poltergeist_core.services._common import GD_FAILURE
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
+from poltergeist_core.utilities import clock
 from poltergeist_core.utilities import logging
 
 logger = logging.get_logger(__name__)
@@ -38,6 +42,16 @@ _REGISTER_WINDOW = 3600
 _REGISTER_ATTEMPT_LIMIT = 30
 _MIGRATE_LIMIT = 10
 _MIGRATE_WINDOW = 600
+_WEB_LOGIN_LIMIT = 10
+_WEB_LOGIN_WINDOW = 600
+_PASSWORD_CHANGE_LIMIT = 5
+_PASSWORD_CHANGE_WINDOW = 600
+_RENAME_ATTEMPT_LIMIT = 10
+_RENAME_ATTEMPT_WINDOW = 3600
+_RENAME_COOLDOWN = timedelta(days=30)
+
+# How long a browser stays signed in; every visit pushes the expiry forward.
+WEB_SESSION_SECONDS = 30 * 86_400
 
 
 class AuthError(ServiceError, StrEnum):
@@ -58,6 +72,7 @@ class AuthError(ServiceError, StrEnum):
     EMAIL_TAKEN = "email_taken"
     USER_NOT_FOUND = "user_not_found"
     ALREADY_MIGRATED = "already_migrated"
+    RENAME_TOO_SOON = "rename_too_soon"
 
     def service(self) -> str:
         return "auth"
@@ -71,7 +86,7 @@ class AuthError(ServiceError, StrEnum):
                 | AuthError.ACCOUNT_BANNED
             ):
                 return HTTPStatus.UNAUTHORIZED
-            case AuthError.TOO_MANY_ATTEMPTS:
+            case AuthError.TOO_MANY_ATTEMPTS | AuthError.RENAME_TOO_SOON:
                 return HTTPStatus.TOO_MANY_REQUESTS
             case (
                 AuthError.NAME_TAKEN
@@ -106,7 +121,11 @@ class AuthError(ServiceError, StrEnum):
                 return codes.RegisterError.EMAIL_INVALID
             case AuthError.EMAIL_TAKEN:
                 return codes.RegisterError.EMAIL_TAKEN
-            case AuthError.USER_NOT_FOUND | AuthError.ALREADY_MIGRATED:
+            case (
+                AuthError.USER_NOT_FOUND
+                | AuthError.ALREADY_MIGRATED
+                | AuthError.RENAME_TOO_SOON
+            ):
                 return GD_FAILURE
 
 
@@ -122,6 +141,12 @@ class Session:
 class LoginResult:
     account_id: int
     user_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class WebLogin:
+    user: User
+    token: str
 
 
 def _hash_gjp2(gjp2: str) -> str:
@@ -168,6 +193,22 @@ async def _verify(ctx: AbstractContext, user: User, gjp2: str) -> bool:
     return True
 
 
+async def _verify_password(
+    ctx: AbstractContext, user: User, credential: UserCredential, password: str
+) -> bool:
+    """Checks a plaintext password against whichever hash the account holds."""
+
+    if credential.gjp2_bcrypt is not None:
+        return await _verify(ctx, user, crypto.gjp2(password))
+
+    if credential.legacy_password_bcrypt is None:
+        return False
+
+    return await asyncio.to_thread(
+        _check_password, password, credential.legacy_password_bcrypt
+    )
+
+
 async def authenticate(
     ctx: AbstractContext, auth: Auth, client: Client
 ) -> AuthError.OnSuccess[Session]:
@@ -208,20 +249,36 @@ async def login(
     return LoginResult(account_id=user.id, user_id=user.id)
 
 
-def _validate_registration(request: RegisterRequest) -> AuthError.OnSuccess[None]:
-    name = request.name.strip()
-
+def _validate_username(name: str) -> AuthError | None:
     if len(name) < _USERNAME_MIN:
         return AuthError.NAME_TOO_SHORT
 
     if len(name) > _USERNAME_MAX or not _USERNAME_PATTERN.match(name):
         return AuthError.NAME_INVALID
 
-    if len(request.password) < _PASSWORD_MIN:
+    return None
+
+
+def _validate_password(password: str) -> AuthError | None:
+    if len(password) < _PASSWORD_MIN:
         return AuthError.PASSWORD_TOO_SHORT
 
-    if len(request.password) > _PASSWORD_MAX:
+    if len(password) > _PASSWORD_MAX:
         return AuthError.PASSWORD_INVALID
+
+    return None
+
+
+def _validate_registration(request: RegisterRequest) -> AuthError.OnSuccess[None]:
+    refused = _validate_username(request.name.strip())
+
+    if refused is not None:
+        return refused
+
+    refused = _validate_password(request.password)
+
+    if refused is not None:
+        return refused
 
     email = request.email.strip()
 
@@ -296,6 +353,7 @@ async def set_password(
     hashed = await asyncio.to_thread(_hash_gjp2, crypto.gjp2(password))
     await ctx.credentials.upsert(user_id, hashed)
     await ctx.sessions.revoke(user_id)
+    await ctx.web_sessions.revoke_all(user_id)
     logger.info("Password set.", extra={"user_id": user_id})
 
     return None
@@ -353,3 +411,172 @@ async def migrate_legacy_password(
     logger.info("Legacy password migrated.", extra={"user_id": user.id})
 
     return user.id
+
+
+async def web_login(
+    ctx: AbstractContext, username: str, password: str, *, ip: str
+) -> AuthError.OnSuccess[WebLogin]:
+    """Signs a browser in with the plaintext password. An imported 2.1
+    account is re-hashed into gjp2 on the way, so it can then log into the
+    game as well."""
+
+    within_limit = await ctx.rate_limits.hit(
+        "web_login", ip, limit=_WEB_LOGIN_LIMIT, window_seconds=_WEB_LOGIN_WINDOW
+    )
+
+    if not within_limit:
+        return AuthError.TOO_MANY_ATTEMPTS
+
+    user = await ctx.users.find_by_username(username.strip())
+
+    if user is None:
+        return AuthError.INVALID_CREDENTIALS
+
+    credential = await ctx.credentials.find_by_user_id(user.id)
+
+    if credential is None:
+        return AuthError.INVALID_CREDENTIALS
+
+    if not await _verify_password(ctx, user, credential, password):
+        return AuthError.INVALID_CREDENTIALS
+
+    if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
+        return AuthError.ACCOUNT_BANNED
+
+    if credential.gjp2_bcrypt is None:
+        hashed = await asyncio.to_thread(_hash_gjp2, crypto.gjp2(password))
+        await ctx.credentials.upsert(user.id, hashed)
+        logger.info("Legacy password migrated.", extra={"user_id": user.id})
+
+    await ctx.users.touch_last_seen(user.id)
+    token = await ctx.web_sessions.create(user.id, seconds=WEB_SESSION_SECONDS)
+    logger.info("User logged in through the web.", extra={"user_id": user.id})
+
+    return WebLogin(user=user, token=token)
+
+
+async def web_authenticate(
+    ctx: AbstractContext, token: str
+) -> AuthError.OnSuccess[User]:
+    user_id = await ctx.web_sessions.resolve(token, seconds=WEB_SESSION_SECONDS)
+
+    if user_id is None:
+        return AuthError.UNAUTHENTICATED
+
+    user = await ctx.users.find_by_id(user_id)
+
+    if user is None:
+        await ctx.web_sessions.revoke(token)
+
+        return AuthError.UNAUTHENTICATED
+
+    if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
+        await ctx.web_sessions.revoke_all(user.id)
+
+        return AuthError.BANNED
+
+    return user
+
+
+async def web_logout(ctx: AbstractContext, token: str) -> None:
+    await ctx.web_sessions.revoke(token)
+
+
+async def change_password(
+    ctx: AbstractContext, user_id: int, current_password: str, new_password: str
+) -> AuthError.OnSuccess[str]:
+    """Every other browser and the game's cached login are signed out; the
+    returned token keeps the caller's own browser signed in."""
+
+    refused = _validate_password(new_password)
+
+    if refused is not None:
+        return refused
+
+    # Keyed by user, so a stolen cookie cannot be used to guess the password.
+    within_limit = await ctx.rate_limits.hit(
+        "password_change",
+        str(user_id),
+        limit=_PASSWORD_CHANGE_LIMIT,
+        window_seconds=_PASSWORD_CHANGE_WINDOW,
+    )
+
+    if not within_limit:
+        return AuthError.TOO_MANY_ATTEMPTS
+
+    user = await ctx.users.find_by_id(user_id)
+
+    if user is None:
+        return AuthError.USER_NOT_FOUND
+
+    credential = await ctx.credentials.find_by_user_id(user_id)
+
+    if credential is None:
+        return AuthError.INVALID_CREDENTIALS
+
+    if not await _verify_password(ctx, user, credential, current_password):
+        return AuthError.INVALID_CREDENTIALS
+
+    hashed = await asyncio.to_thread(_hash_gjp2, crypto.gjp2(new_password))
+    await ctx.credentials.upsert(user_id, hashed)
+    await ctx.sessions.revoke(user_id)
+    await ctx.web_sessions.revoke_all(user_id)
+    token = await ctx.web_sessions.create(user_id, seconds=WEB_SESSION_SECONDS)
+    logger.info("Password changed.", extra={"user_id": user_id})
+
+    return token
+
+
+async def next_rename_at(ctx: AbstractContext, user_id: int) -> datetime | None:
+    """`None` when the user may rename themselves right now."""
+
+    last = await ctx.username_changes.last_self_change_at(user_id)
+
+    if last is None:
+        return None
+
+    due = last + _RENAME_COOLDOWN
+
+    return due if due > clock.now() else None
+
+
+async def rename(
+    ctx: AbstractContext, user_id: int, username: str
+) -> AuthError.OnSuccess[User]:
+    username = username.strip()
+    refused = _validate_username(username)
+
+    if refused is not None:
+        return refused
+
+    # Stops a user probing which names are taken without ever renaming.
+    within_limit = await ctx.rate_limits.hit(
+        "rename_attempt",
+        str(user_id),
+        limit=_RENAME_ATTEMPT_LIMIT,
+        window_seconds=_RENAME_ATTEMPT_WINDOW,
+    )
+
+    if not within_limit:
+        return AuthError.TOO_MANY_ATTEMPTS
+
+    user = await ctx.users.find_by_id(user_id)
+
+    if user is None:
+        return AuthError.USER_NOT_FOUND
+
+    if await next_rename_at(ctx, user_id) is not None:
+        return AuthError.RENAME_TOO_SOON
+
+    existing = await ctx.users.find_by_username(username)
+
+    if existing is not None and existing.id != user_id:
+        return AuthError.NAME_TAKEN
+
+    await ctx.users.update_username(user_id, username)
+    await ctx.username_changes.create(
+        user_id, user.username, username, changed_by_user_id=user_id
+    )
+    logger.info("User renamed.", extra={"user_id": user_id})
+
+    return user.model_copy(update={"username": username})

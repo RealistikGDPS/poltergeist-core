@@ -34,13 +34,16 @@ from . import star_votes
 from . import stats
 from . import suggestions
 from . import timely
+from . import username_changes
 from . import users
+from . import web_sessions
 from .account_comments import AccountComment
 from .account_comments import AccountCommentRepository
 from .analytics import AnalyticsRepository
 from .analytics import CreatorRow
 from .analytics import DailyCount
 from .analytics import LabelCount
+from .analytics import Snapshot
 from .analytics import Totals
 from .bans import BanRepository
 from .bans import BanType
@@ -123,6 +126,9 @@ from .suggestions import SuggestionRepository
 from .timely import TimelyLevel
 from .timely import TimelyRepository
 from .timely import TimelyReward
+from .username_changes import UsernameChange
+from .username_changes import UsernameChangeRepository
 from .users import User
 from .users import UserKind
 from .users import UserRepository
+from .web_sessions import WebSessionRepository

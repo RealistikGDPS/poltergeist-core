@@ -1,6 +1,7 @@
 from . import accounts
 from . import admin
 from . import administration
+from . import analytics
 from . import auth
 from . import clients
 from . import commands

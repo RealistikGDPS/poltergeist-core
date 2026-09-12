@@ -1,6 +1,7 @@
 from enum import StrEnum
 
 from poltergeist_core.adapters.redis import RedisClient
+from poltergeist_core.resources._common import offset
 
 
 class LeaderboardKind(StrEnum):
@@ -88,6 +89,32 @@ class LeaderboardRepository:
 
     async def top(self, kind: LeaderboardKind, count: int) -> list[int]:
         return _members(await self._redis.zrevrange(self._key(kind), 0, count - 1))
+
+    async def page(self, kind: LeaderboardKind, page: int, size: int) -> list[int]:
+        start = offset(page, size)
+
+        return _members(
+            await self._redis.zrevrange(self._key(kind), start, start + size - 1)
+        )
+
+    async def count(self, kind: LeaderboardKind) -> int:
+        return int(await self._redis.zcard(self._key(kind)))
+
+    async def ranks_of(self, user_id: int) -> dict[LeaderboardKind, int]:
+        """The user's position on every board they appear on."""
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            for kind in LeaderboardKind:
+                pipeline.zrevrank(self._key(kind), str(user_id))
+
+            ranks = await pipeline.execute()
+
+        resolved = {
+            kind: _rank_from(rank)
+            for kind, rank in zip(LeaderboardKind, ranks, strict=True)
+        }
+
+        return {kind: rank for kind, rank in resolved.items() if rank is not None}
 
     async def around(
         self, kind: LeaderboardKind, user_id: int, count: int
