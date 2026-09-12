@@ -40,8 +40,6 @@ _FAILED_LOGIN_WINDOW = 600
 _REGISTER_LIMIT = 3
 _REGISTER_WINDOW = 3600
 _REGISTER_ATTEMPT_LIMIT = 30
-_MIGRATE_LIMIT = 10
-_MIGRATE_WINDOW = 600
 _WEB_LOGIN_LIMIT = 10
 _WEB_LOGIN_WINDOW = 600
 _PASSWORD_CHANGE_LIMIT = 5
@@ -71,7 +69,6 @@ class AuthError(ServiceError, StrEnum):
     EMAIL_INVALID = "email_invalid"
     EMAIL_TAKEN = "email_taken"
     USER_NOT_FOUND = "user_not_found"
-    ALREADY_MIGRATED = "already_migrated"
     RENAME_TOO_SOON = "rename_too_soon"
 
     def service(self) -> str:
@@ -88,11 +85,7 @@ class AuthError(ServiceError, StrEnum):
                 return HTTPStatus.UNAUTHORIZED
             case AuthError.TOO_MANY_ATTEMPTS | AuthError.RENAME_TOO_SOON:
                 return HTTPStatus.TOO_MANY_REQUESTS
-            case (
-                AuthError.NAME_TAKEN
-                | AuthError.EMAIL_TAKEN
-                | AuthError.ALREADY_MIGRATED
-            ):
+            case AuthError.NAME_TAKEN | AuthError.EMAIL_TAKEN:
                 return HTTPStatus.CONFLICT
             case AuthError.USER_NOT_FOUND:
                 return HTTPStatus.NOT_FOUND
@@ -121,11 +114,7 @@ class AuthError(ServiceError, StrEnum):
                 return codes.RegisterError.EMAIL_INVALID
             case AuthError.EMAIL_TAKEN:
                 return codes.RegisterError.EMAIL_TAKEN
-            case (
-                AuthError.USER_NOT_FOUND
-                | AuthError.ALREADY_MIGRATED
-                | AuthError.RENAME_TOO_SOON
-            ):
+            case AuthError.USER_NOT_FOUND | AuthError.RENAME_TOO_SOON:
                 return GD_FAILURE
 
 
@@ -357,60 +346,6 @@ async def set_password(
     logger.info("Password set.", extra={"user_id": user_id})
 
     return None
-
-
-async def migrate_legacy_password(
-    ctx: AbstractContext, username: str, password: str, *, ip: str
-) -> AuthError.OnSuccess[int]:
-    """Re-hashes an imported 2.1 account's password into a gjp2 hash so the
-    2.2 client can log in. The password itself does not change."""
-
-    within_limit = await ctx.rate_limits.hit(
-        "migrate", ip, limit=_MIGRATE_LIMIT, window_seconds=_MIGRATE_WINDOW
-    )
-
-    if not within_limit:
-        return AuthError.TOO_MANY_ATTEMPTS
-
-    user = await ctx.users.find_by_username(username.strip())
-
-    if user is None:
-        return AuthError.INVALID_CREDENTIALS
-
-    credential = await ctx.credentials.find_by_user_id(user.id)
-
-    if credential is None:
-        return AuthError.INVALID_CREDENTIALS
-
-    gjp2 = crypto.gjp2(password)
-
-    # An account that already holds a gjp2 hash only learns so with the right
-    # password, so the page reveals nothing more than the game's login does.
-    if credential.legacy_password_bcrypt is None:
-        if credential.gjp2_bcrypt is None:
-            return AuthError.INVALID_CREDENTIALS
-
-        if not await asyncio.to_thread(_check_gjp2, gjp2, credential.gjp2_bcrypt):
-            return AuthError.INVALID_CREDENTIALS
-
-        return AuthError.ALREADY_MIGRATED
-
-    matches = await asyncio.to_thread(
-        _check_password, password, credential.legacy_password_bcrypt
-    )
-
-    if not matches:
-        return AuthError.INVALID_CREDENTIALS
-
-    if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
-        return AuthError.ACCOUNT_BANNED
-
-    hashed = await asyncio.to_thread(_hash_gjp2, gjp2)
-    await ctx.credentials.upsert(user.id, hashed)
-    await ctx.sessions.revoke(user.id)
-    logger.info("Legacy password migrated.", extra={"user_id": user.id})
-
-    return user.id
 
 
 async def web_login(
