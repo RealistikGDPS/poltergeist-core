@@ -124,4 +124,5 @@ from .timely import TimelyLevel
 from .timely import TimelyRepository
 from .timely import TimelyReward
 from .users import User
+from .users import UserKind
 from .users import UserRepository

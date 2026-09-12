@@ -17,6 +17,7 @@ async def rebuild(ctx: AbstractContext) -> int:
 
     leaderboard_banned = set(await ctx.bans.list_banned_user_ids(BanType.LEADERBOARD))
     creator_banned = set(await ctx.bans.list_banned_user_ids(BanType.CREATOR))
+    non_players = set(await ctx.users.list_non_player_ids())
     last_id = 0
     total = 0
 
@@ -29,7 +30,7 @@ async def rebuild(ctx: AbstractContext) -> int:
         for entry in batch:
             last_id = entry.user_id
 
-            if entry.user_id in leaderboard_banned:
+            if entry.user_id in leaderboard_banned or entry.user_id in non_players:
                 continue
 
             if not await ctx.permissions.has(

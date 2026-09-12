@@ -13,6 +13,7 @@ from poltergeist_core.adapters.mysql import MySQLValue
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources._common import offset
 from poltergeist_core.resources._common import placeholders
+from poltergeist_core.resources.users import UserKind
 from poltergeist_core.utilities import clock
 
 _COLUMNS = (
@@ -110,6 +111,7 @@ class LevelSearch:
     exclude_ids: tuple[int, ...] | None = None
     only_ids: tuple[int, ...] | None = None
     featured: bool = False
+    player_creators_only: bool = False
     original: bool = False
     two_player: bool = False
     coins: bool = False
@@ -238,6 +240,13 @@ def _where_sql(search: LevelSearch) -> tuple[str, dict[str, MySQLValue]]:
 
     if search.featured:
         clauses.append("l.feature_order > 0")
+
+    if search.player_creators_only:
+        values["player_kind"] = UserKind.PLAYER.value
+        clauses.append(
+            "l.user_id NOT IN (SELECT u.id FROM users u WHERE u.kind <> "
+            "%(player_kind)s)"
+        )
 
     if search.original:
         clauses.append("l.original_id IS NULL")

@@ -14,6 +14,7 @@ from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Level
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.resources import UserKind
 from poltergeist_core.services import _wire
 from poltergeist_core.services import users
 from poltergeist_core.services._common import AbstractContext
@@ -367,3 +368,42 @@ async def unban(
     )
 
     return revoked
+
+
+async def set_user_kind(
+    ctx: AbstractContext,
+    *,
+    actor_user_id: int | None,
+    target_user_id: int,
+    kind: UserKind,
+) -> ModerationError.OnSuccess[None]:
+    if not await _permitted(ctx, actor_user_id, Permission.USERS_KIND_MANAGE):
+        return ModerationError.NOT_PERMITTED
+
+    target = await ctx.users.find_by_id(target_user_id)
+
+    if target is None:
+        return ModerationError.NOT_FOUND
+
+    if not await _outranks(ctx, actor_user_id, target_user_id):
+        return ModerationError.TARGET_PROTECTED
+
+    if target.kind is kind:
+        return None
+
+    await ctx.users.update_kind(target_user_id, kind)
+    await users.sync_leaderboards(ctx, target_user_id)
+    await _log(
+        ctx,
+        actor_user_id,
+        "kind",
+        ModTarget.USER,
+        target_user_id,
+        {"kind": kind.value},
+    )
+    logger.info(
+        "User kind changed.",
+        extra={"user_id": target_user_id, "kind": kind.value, "by": actor_user_id},
+    )
+
+    return None

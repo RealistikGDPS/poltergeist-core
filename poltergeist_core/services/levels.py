@@ -255,7 +255,13 @@ async def _build_search(
             )
         case SearchType.FEATURED | SearchType.FEATURED_WORLD:
             return _apply_filters(
-                replace(base, order=LevelOrder.FEATURED, featured=True), request
+                replace(
+                    base,
+                    order=LevelOrder.FEATURED,
+                    featured=True,
+                    player_creators_only=True,
+                ),
+                request,
             )
         case SearchType.MAGIC:
             return _apply_filters(
@@ -327,6 +333,7 @@ async def _build_search(
                     base,
                     order=LevelOrder.FEATURED,
                     ratings=(Rating.EPIC, Rating.LEGENDARY, Rating.MYTHIC),
+                    player_creators_only=True,
                 ),
                 request,
             )

@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 
 from gdformat.enums import CommentHistoryState
 from gdformat.enums import FriendRequestState
@@ -11,15 +12,25 @@ from poltergeist_core.resources._common import placeholders
 from poltergeist_core.utilities import clock
 
 _COLUMNS = (
-    "id, username, email, comment_colour, message_privacy, friend_request_privacy, "
-    "comment_history_privacy, youtube, twitter, twitch, discord, instagram, tiktok, "
-    "custom, registered_at, last_seen_at, deleted_at"
+    "id, username, kind, email, comment_colour, message_privacy, "
+    "friend_request_privacy, comment_history_privacy, youtube, twitter, twitch, "
+    "discord, instagram, tiktok, custom, registered_at, last_seen_at, deleted_at"
 )
+
+
+class UserKind(StrEnum):
+    """Identity, not capability: a non-player account never ranks and its
+    levels stay out of the curated listings. What it may do is still decided
+    by its roles."""
+
+    PLAYER = "player"
+    BOT = "bot"
 
 
 class User(Model):
     id: int
     username: str
+    kind: UserKind
     email: str
     comment_colour: int | None
     message_privacy: MessageState
@@ -138,6 +149,22 @@ class UserRepository:
             "UPDATE users SET username = %(username)s WHERE id = %(id)s",
             {"id": user_id, "username": username},
         )
+
+    async def update_kind(self, user_id: int, kind: UserKind) -> None:
+        await self._mysql.execute(
+            "UPDATE users SET kind = %(kind)s WHERE id = %(id)s",
+            {"id": user_id, "kind": kind.value},
+        )
+
+    async def list_non_player_ids(self) -> list[int]:
+        """Includes soft-deleted accounts so they stay out of the rankings."""
+
+        rows = await self._mysql.fetch_all(
+            "SELECT id FROM users WHERE kind <> %(player)s",
+            {"player": UserKind.PLAYER.value},
+        )
+
+        return [int(row["id"]) for row in rows]
 
     async def touch_last_seen(self, user_id: int) -> None:
         await self._mysql.execute(

@@ -44,6 +44,7 @@ class Permission(StrEnum):
     USERS_UNBAN = "users.unban"
     USERS_ROLES_ASSIGN = "users.roles.assign"
     USERS_ROLES_REVOKE = "users.roles.revoke"
+    USERS_KIND_MANAGE = "users.kind.manage"
     USERS_EDIT_ANY = "users.edit_any"
     SCORES_SUBMIT = "scores.submit"
     STATS_UPDATE = "stats.update"

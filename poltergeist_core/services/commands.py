@@ -431,7 +431,8 @@ async def _whois(ctx: AbstractContext, args: Sequence[str]) -> str:
     ban_names = ", ".join(ban.type.value for ban in bans) or "none"
 
     return (
-        f"{target.username} (id {target.id}). Roles: {role_names}. Bans: {ban_names}."
+        f"{target.username} (id {target.id}). Kind: {target.kind.value}. "
+        f"Roles: {role_names}. Bans: {ban_names}."
     )
 
 

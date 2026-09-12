@@ -18,6 +18,7 @@ from poltergeist_core.resources import LeaderboardKind
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import StatsUpdate
 from poltergeist_core.resources import User
+from poltergeist_core.resources import UserKind
 from poltergeist_core.resources import UserStats
 from poltergeist_core.services import _badges
 from poltergeist_core.services import _wire
@@ -347,10 +348,12 @@ async def sync_leaderboards(ctx: AbstractContext, user_id: int) -> None:
     if stats is None:
         return
 
+    user = await ctx.users.find_by_id(user_id)
+    player = user is not None and user.kind is UserKind.PLAYER
     ranked = await ctx.permissions.has(user_id, Permission.LEADERBOARD_RANK)
     banned = await ctx.bans.find_active(user_id, BanType.LEADERBOARD) is not None
 
-    if not ranked or banned:
+    if not player or not ranked or banned:
         await ctx.leaderboards.remove(user_id)
 
         return
@@ -408,10 +411,9 @@ async def _ordered_previews(
 async def _friends_leaderboard(
     ctx: AbstractContext, session: Session, stat: LeaderboardStat
 ) -> list[objects.UserPreview]:
-    user_ids = [
-        session.user.id,
-        *await ctx.friendships.list_friend_ids(session.user.id),
-    ]
+    friend_ids = await ctx.friendships.list_friend_ids(session.user.id)
+    members = await ctx.users.find_many_by_ids([session.user.id, *friend_ids])
+    user_ids = [user.id for user in members if user.kind is UserKind.PLAYER]
     stats = await ctx.stats.find_many_by_user_ids(user_ids)
     stats.sort(key=lambda entry: _stat_value(entry, stat), reverse=True)
     ordered_ids = [entry.user_id for entry in stats[:_LEADERBOARD_MAX]]
