@@ -7,6 +7,8 @@ from gdformat import objects
 
 from poltergeist_core import settings
 from poltergeist_core.adapters.boomlings import BoomlingsError
+from poltergeist_core.resources import CUSTOM_ID_END
+from poltergeist_core.resources import CUSTOM_ID_START
 from poltergeist_core.resources import Song
 from poltergeist_core.resources import SongSource
 from poltergeist_core.services import _wire
@@ -16,7 +18,6 @@ from poltergeist_core.utilities import logging
 
 logger = logging.get_logger(__name__)
 
-_LIBRARY_OFFSET = 10_000_000
 _TOP_ARTISTS_PAGE_SIZE = 20
 _BYTES_PER_MB = 1_048_576
 
@@ -57,6 +58,10 @@ def custom_content_url() -> str:
 
 
 async def _fetch_upstream(ctx: AbstractContext, song_id: int) -> Song | None:
+    # Ids in the custom range are ours; the official servers never know them.
+    if CUSTOM_ID_START <= song_id < CUSTOM_ID_END:
+        return None
+
     if await ctx.song_lookups.is_missing(song_id):
         return None
 
@@ -68,7 +73,7 @@ async def _fetch_upstream(ctx: AbstractContext, song_id: int) -> Song | None:
 
         return None
 
-    source = SongSource.LIBRARY if song_id >= _LIBRARY_OFFSET else SongSource.NEWGROUNDS
+    source = SongSource.LIBRARY if song_id >= CUSTOM_ID_END else SongSource.NEWGROUNDS
 
     await ctx.artists.upsert_upstream(
         upstream.artist_id,

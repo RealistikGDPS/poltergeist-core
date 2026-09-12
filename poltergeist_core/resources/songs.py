@@ -19,6 +19,13 @@ _SONG_COLUMNS = (
 )
 _SONG_FROM = "FROM songs s JOIN artists a ON a.id = s.artist_id"
 
+# A 2.2 client treats every song id from 10,000,000 up as a music library
+# song and fetches it from the official CDN, ignoring the URL the server
+# sends. Songs created here therefore live below that, above any Newgrounds
+# id, and are allocated explicitly rather than by AUTO_INCREMENT.
+CUSTOM_ID_START = 8_000_000
+CUSTOM_ID_END = 10_000_000
+
 
 class SongSource(StrEnum):
     NEWGROUNDS = "newgrounds"
@@ -231,11 +238,20 @@ class SongRepository:
         url: str,
         uploaded_by_user_id: int | None,
     ) -> int:
-        result = await self._mysql.execute(
-            "INSERT INTO songs (name, artist_id, size_bytes, url, source, "
-            "uploaded_by_user_id) VALUES (%(name)s, %(artist)s, %(size)s, %(url)s, "
-            "%(source)s, %(by)s)",
+        """Allocates the next id in the custom range under the caller's
+        transaction; the locking read serialises concurrent creators."""
+
+        song_id: int = await self._mysql.fetch_val(
+            "SELECT COALESCE(MAX(id), %(start)s - 1) + 1 FROM songs "
+            "WHERE id >= %(start)s AND id < %(end)s FOR UPDATE",
+            {"start": CUSTOM_ID_START, "end": CUSTOM_ID_END},
+        )
+        await self._mysql.execute(
+            "INSERT INTO songs (id, name, artist_id, size_bytes, url, source, "
+            "uploaded_by_user_id) VALUES (%(id)s, %(name)s, %(artist)s, %(size)s, "
+            "%(url)s, %(source)s, %(by)s)",
             {
+                "id": song_id,
                 "name": name,
                 "artist": artist_id,
                 "size": size_bytes,
@@ -245,7 +261,7 @@ class SongRepository:
             },
         )
 
-        return result.last_row_id
+        return song_id
 
     async def update(
         self,

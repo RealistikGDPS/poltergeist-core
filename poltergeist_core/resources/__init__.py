@@ -106,6 +106,8 @@ from .secret_rewards import SecretRewardItem
 from .secret_rewards import SecretRewardRepository
 from .sessions import SessionRepository
 from .song_lookups import SongLookupRepository
+from .songs import CUSTOM_ID_END
+from .songs import CUSTOM_ID_START
 from .songs import Artist
 from .songs import ArtistRepository
 from .songs import Song
