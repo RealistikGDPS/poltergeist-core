@@ -27,6 +27,7 @@ from . import roles
 from . import saves
 from . import scores
 from . import secret_rewards
+from . import server_settings
 from . import sessions
 from . import song_lookups
 from . import songs
@@ -107,6 +108,8 @@ from .scores import PlatformerScoreRepository
 from .secret_rewards import SecretReward
 from .secret_rewards import SecretRewardItem
 from .secret_rewards import SecretRewardRepository
+from .server_settings import ServerSettingRepository
+from .server_settings import ServerSettings
 from .sessions import SessionRepository
 from .song_lookups import SongLookupRepository
 from .songs import CUSTOM_ID_END

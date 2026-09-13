@@ -16,6 +16,7 @@ from . import packs
 from . import rewards
 from . import roles
 from . import scores
+from . import server_settings
 from . import socials
 from . import songs
 from . import timely

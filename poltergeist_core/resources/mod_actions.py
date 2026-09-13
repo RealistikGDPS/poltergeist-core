@@ -21,6 +21,7 @@ class ModTarget(StrEnum):
     QUEST = "quest"
     SECRET_REWARD = "secret_reward"
     ROLE = "role"
+    SERVER = "server"
 
 
 class ModAction(Model):

@@ -38,6 +38,7 @@ from poltergeist_core.resources import ReportRepository
 from poltergeist_core.resources import RoleRepository
 from poltergeist_core.resources import SaveRepository
 from poltergeist_core.resources import SecretRewardRepository
+from poltergeist_core.resources import ServerSettingRepository
 from poltergeist_core.resources import SessionRepository
 from poltergeist_core.resources import SongLookupRepository
 from poltergeist_core.resources import SongRepository
@@ -110,6 +111,10 @@ class AbstractContext(ABC):
     @property
     def analytics(self) -> AnalyticsRepository:
         return AnalyticsRepository(self._mysql, self._redis)
+
+    @property
+    def server_settings(self) -> ServerSettingRepository:
+        return ServerSettingRepository(self._mysql, self._redis)
 
     @property
     def username_changes(self) -> UsernameChangeRepository:

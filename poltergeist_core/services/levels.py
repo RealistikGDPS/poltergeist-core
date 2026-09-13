@@ -30,6 +30,7 @@ from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import User
 from poltergeist_core.services import _wire
+from poltergeist_core.services import server_settings
 from poltergeist_core.services import songs
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -70,6 +71,7 @@ class LevelError(ServiceError, StrEnum):
     LOCKED = "locked"
     BANNED = "banned"
     RATE_LIMITED = "rate_limited"
+    UPLOADS_DISABLED = "uploads_disabled"
 
     def service(self) -> str:
         return "levels"
@@ -78,7 +80,12 @@ class LevelError(ServiceError, StrEnum):
         match self:
             case LevelError.NOT_FOUND:
                 return HTTPStatus.NOT_FOUND
-            case LevelError.NOT_PERMITTED | LevelError.LOCKED | LevelError.BANNED:
+            case (
+                LevelError.NOT_PERMITTED
+                | LevelError.LOCKED
+                | LevelError.BANNED
+                | LevelError.UPLOADS_DISABLED
+            ):
                 return HTTPStatus.FORBIDDEN
             case LevelError.TOO_LARGE:
                 return HTTPStatus.CONTENT_TOO_LARGE
@@ -562,6 +569,9 @@ async def upload(
 
     if not await ctx.permissions.has(user_id, Permission.LEVELS_UPLOAD):
         return LevelError.NOT_PERMITTED
+
+    if not (await server_settings.current(ctx)).level_uploads_enabled:
+        return LevelError.UPLOADS_DISABLED
 
     if await ctx.bans.find_active(user_id, BanType.UPLOAD) is not None:
         return LevelError.BANNED

@@ -18,6 +18,7 @@ from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import User
 from poltergeist_core.resources import UserCredential
+from poltergeist_core.services import server_settings
 from poltergeist_core.services._common import GD_FAILURE
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -70,6 +71,7 @@ class AuthError(ServiceError, StrEnum):
     EMAIL_TAKEN = "email_taken"
     USER_NOT_FOUND = "user_not_found"
     RENAME_TOO_SOON = "rename_too_soon"
+    REGISTRATION_DISABLED = "registration_disabled"
 
     def service(self) -> str:
         return "auth"
@@ -89,6 +91,8 @@ class AuthError(ServiceError, StrEnum):
                 return HTTPStatus.CONFLICT
             case AuthError.USER_NOT_FOUND:
                 return HTTPStatus.NOT_FOUND
+            case AuthError.REGISTRATION_DISABLED:
+                return HTTPStatus.FORBIDDEN
             case _:
                 return HTTPStatus.BAD_REQUEST
 
@@ -114,7 +118,11 @@ class AuthError(ServiceError, StrEnum):
                 return codes.RegisterError.EMAIL_INVALID
             case AuthError.EMAIL_TAKEN:
                 return codes.RegisterError.EMAIL_TAKEN
-            case AuthError.USER_NOT_FOUND | AuthError.RENAME_TOO_SOON:
+            case (
+                AuthError.USER_NOT_FOUND
+                | AuthError.RENAME_TOO_SOON
+                | AuthError.REGISTRATION_DISABLED
+            ):
                 return GD_FAILURE
 
 
@@ -280,6 +288,9 @@ def _validate_registration(request: RegisterRequest) -> AuthError.OnSuccess[None
 async def register(
     ctx: AbstractContext, request: RegisterRequest, *, ip: str
 ) -> AuthError.OnSuccess[int]:
+    if not (await server_settings.current(ctx)).registration_enabled:
+        return AuthError.REGISTRATION_DISABLED
+
     validation = _validate_registration(request)
 
     if validation is not None:
