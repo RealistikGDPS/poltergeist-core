@@ -5,6 +5,7 @@ from datetime import timedelta
 from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import Model
+from poltergeist_core.resources.mod_actions import ModAction
 from poltergeist_core.utilities import clock
 
 _SNAPSHOT_KEY = "analytics:snapshot"
@@ -50,6 +51,44 @@ class Snapshot(Model):
     active_users: list[DailyCount]
     difficulties: list[LabelCount]
     top_creators: list[CreatorRow]
+    generated_at: datetime
+
+
+class Trend(Model):
+    """A daily series over the window and its change against the window before."""
+
+    current: list[DailyCount]
+    current_total: int
+    previous_total: int
+    sparkline: list[int]
+
+    @property
+    def delta(self) -> int:
+        return self.current_total - self.previous_total
+
+
+class RecentAction(Model):
+    action: ModAction
+    actor_username: str
+
+
+class Dashboard(Model):
+    """The admin overview: totals, trends over the chosen window and the
+    latest moderation events."""
+
+    days: int
+    totals: Totals
+    registrations: Trend
+    active_users: Trend
+    uploads: Trend
+    comments: Trend
+    mod_actions: Trend
+    comment_hours: list[LabelCount]
+    difficulties: list[LabelCount]
+    stars: list[LabelCount]
+    lengths: list[LabelCount]
+    top_creators: list[CreatorRow]
+    recent_actions: list[RecentAction]
     generated_at: datetime
 
 

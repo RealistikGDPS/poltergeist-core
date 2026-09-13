@@ -43,9 +43,12 @@ from .account_comments import AccountCommentRepository
 from .analytics import AnalyticsRepository
 from .analytics import CreatorRow
 from .analytics import DailyCount
+from .analytics import Dashboard
 from .analytics import LabelCount
+from .analytics import RecentAction
 from .analytics import Snapshot
 from .analytics import Totals
+from .analytics import Trend
 from .bans import BanRepository
 from .bans import BanType
 from .bans import UserBan
