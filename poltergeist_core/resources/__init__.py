@@ -66,6 +66,11 @@ from .friendships import FriendshipRepository
 from .gauntlets import Gauntlet
 from .gauntlets import GauntletRepository
 from .health import HealthRepository
+from .health import MySQLFacts
+from .health import MySQLProbe
+from .health import RedisFacts
+from .health import RedisProbe
+from .health import StackHealth
 from .leaderboards import LeaderboardKind
 from .leaderboards import LeaderboardRepository
 from .level_data import LevelData

@@ -1,8 +1,10 @@
 from enum import StrEnum
 from http import HTTPStatus
 
+from poltergeist_core.resources import StackHealth
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
+from poltergeist_core.utilities import clock
 
 
 class HealthError(ServiceError, StrEnum):
@@ -24,3 +26,11 @@ async def check(ctx: AbstractContext) -> HealthError.OnSuccess[None]:
         return HealthError.REDIS_UNAVAILABLE
 
     return None
+
+
+async def stack(ctx: AbstractContext) -> StackHealth:
+    return StackHealth(
+        mysql=await ctx.health.probe_mysql(),
+        redis=await ctx.health.probe_redis(),
+        checked_at=clock.now(),
+    )
