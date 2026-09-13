@@ -12,8 +12,6 @@ APP_SMALL_CHEST_SECONDS = int(os.environ["APP_SMALL_CHEST_SECONDS"])
 APP_LARGE_CHEST_SECONDS = int(os.environ["APP_LARGE_CHEST_SECONDS"])
 APP_SESSION_SECONDS = int(os.environ["APP_SESSION_SECONDS"])
 APP_STORAGE_PATH = os.environ["APP_STORAGE_PATH"]
-# An empty key means the administration API is switched off.
-APP_ADMIN_API_KEY = os.environ["APP_ADMIN_API_KEY"]
 
 BOOMLINGS_URL = os.environ["BOOMLINGS_URL"].rstrip("/")
 BOOMLINGS_TIMEOUT_SECONDS = float(os.environ["BOOMLINGS_TIMEOUT_SECONDS"])

@@ -11,9 +11,16 @@ from gdformat.enums import Visibility
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import Role
+from poltergeist_core.resources import Song
+from poltergeist_core.services import auth
+from poltergeist_core.services import leaderboards
+from poltergeist_core.services import moderation
 from poltergeist_core.services import songs
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
+from poltergeist_core.services._common import is_error
+from poltergeist_core.services.auth import AuthError
+from poltergeist_core.services.songs import SongError
 from poltergeist_core.utilities import logging
 from poltergeist_core.utilities import permissions
 
@@ -125,6 +132,93 @@ async def revoke_sessions(
     await ctx.permissions.invalidate(user_id)
     await ctx.mod_actions.create(
         actor_user_id, "revoke_sessions", ModTarget.USER, user_id
+    )
+
+    return None
+
+
+async def set_password(
+    ctx: AbstractContext, *, actor_user_id: int, user_id: int, password: str
+) -> AdministrationError.OnSuccess[None]:
+    """Resets a player's password and signs them out everywhere. Not logged
+    in detail: the mod log never carries a credential."""
+
+    refused = await _require(ctx, actor_user_id, Permission.USERS_EDIT_ANY)
+
+    if refused is not None:
+        return refused
+
+    if not await moderation.outranks(ctx, actor_user_id, user_id):
+        return AdministrationError.NOT_PERMITTED
+
+    result = await auth.set_password(ctx, user_id, password)
+
+    if is_error(result):
+        match result:
+            case AuthError.USER_NOT_FOUND:
+                return AdministrationError.NOT_FOUND
+            case _:
+                return AdministrationError.INVALID
+
+    await ctx.mod_actions.create(actor_user_id, "set_password", ModTarget.USER, user_id)
+
+    return None
+
+
+async def delete_level(
+    ctx: AbstractContext, *, actor_user_id: int, level_id: int
+) -> AdministrationError.OnSuccess[None]:
+    refused = await _require(ctx, actor_user_id, Permission.LEVELS_DELETE_ANY)
+
+    if refused is not None:
+        return refused
+
+    level = await ctx.levels.find_by_id(level_id)
+
+    if level is None:
+        return AdministrationError.NOT_FOUND
+
+    await ctx.levels.soft_delete(level.id)
+    await ctx.mod_actions.create(actor_user_id, "delete", ModTarget.LEVEL, level.id)
+
+    return None
+
+
+async def delete_comment(
+    ctx: AbstractContext, *, actor_user_id: int, comment_id: int
+) -> AdministrationError.OnSuccess[None]:
+    refused = await _require(ctx, actor_user_id, Permission.COMMENTS_DELETE_ANY)
+
+    if refused is not None:
+        return refused
+
+    comment = await ctx.comments.find_by_id(comment_id)
+
+    if comment is None:
+        return AdministrationError.NOT_FOUND
+
+    await ctx.comments.soft_delete(comment.id)
+    await ctx.mod_actions.create(actor_user_id, "delete", ModTarget.COMMENT, comment.id)
+
+    return None
+
+
+async def delete_account_comment(
+    ctx: AbstractContext, *, actor_user_id: int, comment_id: int
+) -> AdministrationError.OnSuccess[None]:
+    refused = await _require(ctx, actor_user_id, Permission.PROFILE_DELETE_ANY)
+
+    if refused is not None:
+        return refused
+
+    comment = await ctx.account_comments.find_by_id(comment_id)
+
+    if comment is None:
+        return AdministrationError.NOT_FOUND
+
+    await ctx.account_comments.soft_delete(comment.id)
+    await ctx.mod_actions.create(
+        actor_user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
     )
 
     return None
@@ -245,6 +339,71 @@ async def set_song_disabled(
     return None
 
 
+def _validate_song_fields(
+    name: str, artist_name: str, url: str, size_bytes: int
+) -> AdministrationError | None:
+    if not name or not artist_name or not url.startswith("http") or size_bytes <= 0:
+        return AdministrationError.INVALID
+
+    if (
+        len(name) > _SONG_NAME_LENGTH
+        or len(artist_name) > _ARTIST_NAME_LENGTH
+        or len(url) > _SONG_URL_LENGTH
+    ):
+        return AdministrationError.INVALID
+
+    return None
+
+
+async def create_song(
+    ctx: AbstractContext,
+    *,
+    actor_user_id: int,
+    name: str,
+    artist_name: str,
+    url: str,
+    size_bytes: int,
+) -> AdministrationError.OnSuccess[Song]:
+    refused = await _require(ctx, actor_user_id, Permission.SONGS_MANAGE)
+
+    if refused is not None:
+        return refused
+
+    name = name.strip()
+    artist_name = artist_name.strip()
+    url = url.strip()
+    invalid = _validate_song_fields(name, artist_name, url, size_bytes)
+
+    if invalid is not None:
+        return invalid
+
+    created = await songs.create_custom(
+        ctx,
+        name=name,
+        artist_name=artist_name,
+        url=url,
+        size_bytes=size_bytes,
+        uploaded_by_user_id=actor_user_id,
+    )
+
+    if is_error(created):
+        match created:
+            case SongError.NOT_FOUND:
+                return AdministrationError.NOT_FOUND
+            case _:
+                return AdministrationError.INVALID
+
+    await ctx.mod_actions.create(
+        actor_user_id,
+        "create",
+        ModTarget.SONG,
+        created.id,
+        {"name": name, "artist": artist_name, "url": url, "size_bytes": size_bytes},
+    )
+
+    return created
+
+
 async def update_song(
     ctx: AbstractContext,
     *,
@@ -265,16 +424,10 @@ async def update_song(
     name = name.strip()
     artist_name = artist_name.strip()
     url = url.strip()
+    invalid = _validate_song_fields(name, artist_name, url, size_bytes)
 
-    if not name or not artist_name or not url.startswith("http") or size_bytes <= 0:
-        return AdministrationError.INVALID
-
-    if (
-        len(name) > _SONG_NAME_LENGTH
-        or len(artist_name) > _ARTIST_NAME_LENGTH
-        or len(url) > _SONG_URL_LENGTH
-    ):
-        return AdministrationError.INVALID
+    if invalid is not None:
+        return invalid
 
     if await ctx.songs.find_by_id(song_id) is None:
         return AdministrationError.NOT_FOUND
@@ -546,3 +699,19 @@ async def remove_gauntlet(
     )
 
     return None
+
+
+async def rebuild_leaderboards(
+    ctx: AbstractContext, *, actor_user_id: int
+) -> AdministrationError.OnSuccess[int]:
+    refused = await _require(ctx, actor_user_id, Permission.ADMIN_MAINTENANCE)
+
+    if refused is not None:
+        return refused
+
+    total = await leaderboards.rebuild(ctx)
+    await ctx.mod_actions.create(
+        actor_user_id, "rebuild_leaderboards", ModTarget.SERVER, 0, {"users": total}
+    )
+
+    return total

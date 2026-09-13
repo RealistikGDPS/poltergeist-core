@@ -72,17 +72,14 @@ async def current(
 async def schedule(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     timely_type: TimelyType,
     level_id: int,
 ) -> TimelyError.OnSuccess[TimelyLevel]:
     """Appends the level to the queue: it starts when the previous entry of
-    the same type ends, or right away when nothing valid is being served. A
-    `None` actor is the administration API."""
+    the same type ends, or right away when nothing valid is being served."""
 
-    if actor_user_id is not None and not await ctx.permissions.has(
-        actor_user_id, Permission.TIMELY_SCHEDULE
-    ):
+    if not await ctx.permissions.has(actor_user_id, Permission.TIMELY_SCHEDULE):
         return TimelyError.NOT_PERMITTED
 
     level = await ctx.levels.find_by_id(level_id)
@@ -111,14 +108,13 @@ async def schedule(
         for item, amount in _EVENT_REWARDS:
             await ctx.timely.add_reward(timely_id, item, amount)
 
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id,
-            "schedule",
-            ModTarget.TIMELY_LEVEL,
-            timely_id,
-            {"type": int(timely_type), "level_id": level.id},
-        )
+    await ctx.mod_actions.create(
+        actor_user_id,
+        "schedule",
+        ModTarget.TIMELY_LEVEL,
+        timely_id,
+        {"type": int(timely_type), "level_id": level.id},
+    )
 
     entry = await ctx.timely.find_by_id(timely_id)
 

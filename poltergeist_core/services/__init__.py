@@ -1,5 +1,4 @@
 from . import accounts
-from . import admin
 from . import administration
 from . import analytics
 from . import auth

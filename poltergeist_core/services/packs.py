@@ -6,6 +6,7 @@ from gdformat import objects
 from gdformat.enums import MapPackDifficulty
 
 from poltergeist_core.resources import ModTarget
+from poltergeist_core.resources import Permission
 from poltergeist_core.services import _wire
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -17,6 +18,7 @@ _GAUNTLET_ID_MAX = 255
 
 class PackError(ServiceError, StrEnum):
     NOT_FOUND = "not_found"
+    NOT_PERMITTED = "not_permitted"
     INVALID = "invalid"
 
     def service(self) -> str:
@@ -26,6 +28,8 @@ class PackError(ServiceError, StrEnum):
         match self:
             case PackError.NOT_FOUND:
                 return HTTPStatus.NOT_FOUND
+            case PackError.NOT_PERMITTED:
+                return HTTPStatus.FORBIDDEN
             case PackError.INVALID:
                 return HTTPStatus.BAD_REQUEST
 
@@ -64,7 +68,7 @@ async def _known_level_ids(ctx: AbstractContext, level_ids: list[int]) -> list[i
 async def create_map_pack(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     name: str,
     level_ids: list[int],
     stars: int,
@@ -73,6 +77,9 @@ async def create_map_pack(
     text_colour: int,
     bar_colour: int,
 ) -> PackError.OnSuccess[int]:
+    if not await ctx.permissions.has(actor_user_id, Permission.PACKS_MANAGE):
+        return PackError.NOT_PERMITTED
+
     levels = await _known_level_ids(ctx, level_ids)
 
     if not name.strip() or not levels:
@@ -88,10 +95,7 @@ async def create_map_pack(
     )
     await ctx.map_packs.replace_levels(pack_id, levels)
 
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id, "create", ModTarget.MAP_PACK, pack_id
-        )
+    await ctx.mod_actions.create(actor_user_id, "create", ModTarget.MAP_PACK, pack_id)
 
     return pack_id
 
@@ -99,10 +103,13 @@ async def create_map_pack(
 async def set_gauntlet(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     gauntlet_id: int,
     level_ids: list[int],
 ) -> PackError.OnSuccess[None]:
+    if not await ctx.permissions.has(actor_user_id, Permission.PACKS_MANAGE):
+        return PackError.NOT_PERMITTED
+
     levels = await _known_level_ids(ctx, level_ids)
 
     if not 1 <= gauntlet_id <= _GAUNTLET_ID_MAX or len(levels) != _GAUNTLET_SIZE:
@@ -110,9 +117,6 @@ async def set_gauntlet(
 
     await ctx.gauntlets.upsert(gauntlet_id, levels)
 
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id, "set", ModTarget.GAUNTLET, gauntlet_id
-        )
+    await ctx.mod_actions.create(actor_user_id, "set", ModTarget.GAUNTLET, gauntlet_id)
 
     return None

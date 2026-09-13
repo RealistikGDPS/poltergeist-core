@@ -29,14 +29,8 @@ class RoleError(ServiceError, StrEnum):
                 return HTTPStatus.FORBIDDEN
 
 
-async def _may_manage(
-    ctx: AbstractContext, actor_user_id: int | None, role: Role
-) -> bool:
-    """`None` is the administration API, which may manage every role. A person
-    may only hand out roles below their own highest role."""
-
-    if actor_user_id is None:
-        return True
+async def _may_manage(ctx: AbstractContext, actor_user_id: int, role: Role) -> bool:
+    """A person may only hand out roles below their own highest role."""
 
     actor_roles = await ctx.roles.list_by_user(actor_user_id)
     highest = max((entry.priority for entry in actor_roles), default=0)
@@ -47,14 +41,12 @@ async def _may_manage(
 async def assign(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     target_user_id: int,
     role_name: str,
     expires_at: datetime | None,
 ) -> RoleError.OnSuccess[Role]:
-    if actor_user_id is not None and not await ctx.permissions.has(
-        actor_user_id, Permission.USERS_ROLES_ASSIGN
-    ):
+    if not await ctx.permissions.has(actor_user_id, Permission.USERS_ROLES_ASSIGN):
         return RoleError.NOT_PERMITTED
 
     role = await ctx.roles.find_by_name(role_name.strip().lower())
@@ -73,14 +65,13 @@ async def assign(
     )
     await ctx.permissions.invalidate(target_user_id)
 
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id,
-            "assign",
-            ModTarget.ROLE,
-            role.id,
-            {"user_id": target_user_id},
-        )
+    await ctx.mod_actions.create(
+        actor_user_id,
+        "assign",
+        ModTarget.ROLE,
+        role.id,
+        {"user_id": target_user_id},
+    )
 
     logger.info(
         "Role assigned.",
@@ -93,13 +84,11 @@ async def assign(
 async def revoke(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     target_user_id: int,
     role_name: str,
 ) -> RoleError.OnSuccess[Role]:
-    if actor_user_id is not None and not await ctx.permissions.has(
-        actor_user_id, Permission.USERS_ROLES_REVOKE
-    ):
+    if not await ctx.permissions.has(actor_user_id, Permission.USERS_ROLES_REVOKE):
         return RoleError.NOT_PERMITTED
 
     role = await ctx.roles.find_by_name(role_name.strip().lower())
@@ -115,14 +104,13 @@ async def revoke(
 
     await ctx.permissions.invalidate(target_user_id)
 
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id,
-            "revoke",
-            ModTarget.ROLE,
-            role.id,
-            {"user_id": target_user_id},
-        )
+    await ctx.mod_actions.create(
+        actor_user_id,
+        "revoke",
+        ModTarget.ROLE,
+        role.id,
+        {"user_id": target_user_id},
+    )
 
     return role
 

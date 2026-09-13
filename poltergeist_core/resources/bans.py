@@ -4,6 +4,7 @@ from enum import StrEnum
 from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources._common import offset
+from poltergeist_core.resources._common import placeholders
 from poltergeist_core.utilities import clock
 
 _COLUMNS = (
@@ -70,6 +71,18 @@ class BanRepository:
             f"SELECT {_COLUMNS} FROM user_bans WHERE {_ACTIVE} "
             "ORDER BY created_at DESC LIMIT %(limit)s OFFSET %(offset)s",
             {"now": clock.now(), "limit": size, "offset": offset(page, size)},
+        )
+
+        return [UserBan.model_validate(row) for row in rows]
+
+    async def find_many_by_ids(self, ban_ids: list[int]) -> list[UserBan]:
+        if not ban_ids:
+            return []
+
+        sql, values = placeholders(ban_ids, "b")
+
+        rows = await self._mysql.fetch_all(
+            f"SELECT {_COLUMNS} FROM user_bans WHERE id IN ({sql})", values
         )
 
         return [UserBan.model_validate(row) for row in rows]

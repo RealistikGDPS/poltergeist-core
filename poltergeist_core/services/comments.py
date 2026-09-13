@@ -12,6 +12,7 @@ from gdformat.requests import UploadCommentRequest
 from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Comment
+from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.services import _badges
 from poltergeist_core.services import _wire
@@ -217,6 +218,11 @@ async def delete_level_comment(
     if not allowed:
         allowed = await ctx.permissions.has(user_id, Permission.COMMENTS_DELETE_ANY)
 
+        if allowed:
+            await ctx.mod_actions.create(
+                user_id, "delete", ModTarget.COMMENT, comment.id
+            )
+
     if not allowed:
         return CommentError.NOT_PERMITTED
 
@@ -323,10 +329,13 @@ async def delete_account_comment(
 
     user_id = session.user.id
 
-    if comment.user_id != user_id and not await ctx.permissions.has(
-        user_id, Permission.PROFILE_DELETE_ANY
-    ):
-        return CommentError.NOT_PERMITTED
+    if comment.user_id != user_id:
+        if not await ctx.permissions.has(user_id, Permission.PROFILE_DELETE_ANY):
+            return CommentError.NOT_PERMITTED
+
+        await ctx.mod_actions.create(
+            user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
+        )
 
     await ctx.account_comments.soft_delete(comment.id)
 

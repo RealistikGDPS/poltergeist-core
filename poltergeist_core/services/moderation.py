@@ -81,35 +81,10 @@ async def refresh_creator_points(ctx: AbstractContext, user_id: int) -> None:
     await users.sync_leaderboards(ctx, user_id)
 
 
-async def _permitted(
-    ctx: AbstractContext, actor_user_id: int | None, permission: Permission
-) -> bool:
-    """`None` is the administration API, which is not subject to permissions."""
-
-    if actor_user_id is None:
-        return True
-
-    return await ctx.permissions.has(actor_user_id, permission)
-
-
-async def _log(
-    ctx: AbstractContext,
-    actor_user_id: int | None,
-    action: str,
-    target_type: ModTarget,
-    target_id: int,
-    details: dict[str, object] | None = None,
-) -> None:
-    if actor_user_id is not None:
-        await ctx.mod_actions.create(
-            actor_user_id, action, target_type, target_id, details
-        )
-
-
 async def rate_level(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     level_id: int,
     stars: int,
     feature: SendFeature | None,
@@ -126,13 +101,13 @@ async def rate_level(
     if level is None:
         return ModerationError.NOT_FOUND
 
-    if stars != level.stars and not await _permitted(
-        ctx, actor_user_id, Permission.LEVELS_RATE
+    if stars != level.stars and not await ctx.permissions.has(
+        actor_user_id, Permission.LEVELS_RATE
     ):
         return ModerationError.NOT_PERMITTED
 
-    if feature is not None and not await _permitted(
-        ctx, actor_user_id, Permission.LEVELS_FEATURE
+    if feature is not None and not await ctx.permissions.has(
+        actor_user_id, Permission.LEVELS_FEATURE
     ):
         return ModerationError.NOT_PERMITTED
 
@@ -180,8 +155,7 @@ async def rate_level(
     await ctx.suggestions.resolve_for_level(level.id)
     await refresh_creator_points(ctx, level.user_id)
 
-    await _log(
-        ctx,
+    await ctx.mod_actions.create(
         actor_user_id,
         "rate",
         ModTarget.LEVEL,
@@ -266,11 +240,11 @@ async def rate_demon(
     return level.id
 
 
-async def _outranks(
-    ctx: AbstractContext, actor_user_id: int | None, target_user_id: int
+async def outranks(
+    ctx: AbstractContext, actor_user_id: int, target_user_id: int
 ) -> bool:
-    if actor_user_id is None:
-        return True
+    """A person may only act on accounts below their own highest role, and
+    never on themselves."""
 
     if actor_user_id == target_user_id:
         return False
@@ -286,19 +260,19 @@ async def _outranks(
 async def ban(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     target_user_id: int,
     ban_type: BanType,
     days: int | None,
     reason: str,
 ) -> ModerationError.OnSuccess[int]:
-    if not await _permitted(ctx, actor_user_id, _ban_permission(ban_type)):
+    if not await ctx.permissions.has(actor_user_id, _ban_permission(ban_type)):
         return ModerationError.NOT_PERMITTED
 
     if await ctx.users.find_by_id(target_user_id) is None:
         return ModerationError.NOT_FOUND
 
-    if not await _outranks(ctx, actor_user_id, target_user_id):
+    if not await outranks(ctx, actor_user_id, target_user_id):
         return ModerationError.TARGET_PROTECTED
 
     if days is not None and days <= 0:
@@ -323,8 +297,7 @@ async def ban(
         case _:
             pass
 
-    await _log(
-        ctx,
+    await ctx.mod_actions.create(
         actor_user_id,
         "ban",
         ModTarget.USER,
@@ -342,11 +315,11 @@ async def ban(
 async def unban(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     target_user_id: int,
     ban_type: BanType,
 ) -> ModerationError.OnSuccess[int]:
-    if not await _permitted(ctx, actor_user_id, Permission.USERS_UNBAN):
+    if not await ctx.permissions.has(actor_user_id, Permission.USERS_UNBAN):
         return ModerationError.NOT_PERMITTED
 
     if await ctx.users.find_by_id(target_user_id) is None:
@@ -359,8 +332,7 @@ async def unban(
     if ban_type in (BanType.LEADERBOARD, BanType.CREATOR):
         await users.sync_leaderboards(ctx, target_user_id)
 
-    await _log(
-        ctx,
+    await ctx.mod_actions.create(
         actor_user_id,
         "unban",
         ModTarget.USER,
@@ -374,11 +346,11 @@ async def unban(
 async def set_user_kind(
     ctx: AbstractContext,
     *,
-    actor_user_id: int | None,
+    actor_user_id: int,
     target_user_id: int,
     kind: UserKind,
 ) -> ModerationError.OnSuccess[None]:
-    if not await _permitted(ctx, actor_user_id, Permission.USERS_KIND_MANAGE):
+    if not await ctx.permissions.has(actor_user_id, Permission.USERS_KIND_MANAGE):
         return ModerationError.NOT_PERMITTED
 
     target = await ctx.users.find_by_id(target_user_id)
@@ -386,7 +358,7 @@ async def set_user_kind(
     if target is None:
         return ModerationError.NOT_FOUND
 
-    if not await _outranks(ctx, actor_user_id, target_user_id):
+    if not await outranks(ctx, actor_user_id, target_user_id):
         return ModerationError.TARGET_PROTECTED
 
     if target.kind is kind:
@@ -394,8 +366,7 @@ async def set_user_kind(
 
     await ctx.users.update_kind(target_user_id, kind)
     await users.sync_leaderboards(ctx, target_user_id)
-    await _log(
-        ctx,
+    await ctx.mod_actions.create(
         actor_user_id,
         "kind",
         ModTarget.USER,
