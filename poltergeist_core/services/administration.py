@@ -8,10 +8,13 @@ from gdformat.enums import QuestItem
 from gdformat.enums import RewardItem
 from gdformat.enums import Visibility
 
+from poltergeist_core.resources import LevelDeleted
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import Role
 from poltergeist_core.resources import Song
+from poltergeist_core.resources import UserRenamed
+from poltergeist_core.services import _audit
 from poltergeist_core.services import auth
 from poltergeist_core.services import leaderboards
 from poltergeist_core.services import moderation
@@ -92,8 +95,17 @@ async def rename_user(
         user_id, user.username, username, changed_by_user_id=actor_user_id
     )
 
-    await ctx.mod_actions.create(
-        actor_user_id, "rename", ModTarget.USER, user_id, {"username": username}
+    await _audit.record(
+        ctx, actor_user_id, "rename", ModTarget.USER, user_id, {"username": username}
+    )
+
+    await ctx.events.publish(
+        UserRenamed(
+            user_id=user_id,
+            old_username=user.username,
+            new_username=username,
+            actor_user_id=actor_user_id,
+        )
     )
 
     return None
@@ -112,8 +124,13 @@ async def set_comment_colour(
 
     await ctx.users.update_comment_colour(user_id, colour)
 
-    await ctx.mod_actions.create(
-        actor_user_id, "comment_colour", ModTarget.USER, user_id, {"colour": colour}
+    await _audit.record(
+        ctx,
+        actor_user_id,
+        "comment_colour",
+        ModTarget.USER,
+        user_id,
+        {"colour": colour},
     )
 
     return None
@@ -130,9 +147,7 @@ async def revoke_sessions(
     await ctx.sessions.revoke(user_id)
     await ctx.web_sessions.revoke_all(user_id)
     await ctx.permissions.invalidate(user_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "revoke_sessions", ModTarget.USER, user_id
-    )
+    await _audit.record(ctx, actor_user_id, "revoke_sessions", ModTarget.USER, user_id)
 
     return None
 
@@ -160,7 +175,7 @@ async def set_password(
             case _:
                 return AdministrationError.INVALID
 
-    await ctx.mod_actions.create(actor_user_id, "set_password", ModTarget.USER, user_id)
+    await _audit.record(ctx, actor_user_id, "set_password", ModTarget.USER, user_id)
 
     return None
 
@@ -179,7 +194,16 @@ async def delete_level(
         return AdministrationError.NOT_FOUND
 
     await ctx.levels.soft_delete(level.id)
-    await ctx.mod_actions.create(actor_user_id, "delete", ModTarget.LEVEL, level.id)
+    await _audit.record(ctx, actor_user_id, "delete", ModTarget.LEVEL, level.id)
+
+    await ctx.events.publish(
+        LevelDeleted(
+            level_id=level.id,
+            level_name=level.name,
+            user_id=level.user_id,
+            actor_user_id=actor_user_id,
+        )
+    )
 
     return None
 
@@ -198,7 +222,7 @@ async def delete_comment(
         return AdministrationError.NOT_FOUND
 
     await ctx.comments.soft_delete(comment.id)
-    await ctx.mod_actions.create(actor_user_id, "delete", ModTarget.COMMENT, comment.id)
+    await _audit.record(ctx, actor_user_id, "delete", ModTarget.COMMENT, comment.id)
 
     return None
 
@@ -217,8 +241,8 @@ async def delete_account_comment(
         return AdministrationError.NOT_FOUND
 
     await ctx.account_comments.soft_delete(comment.id)
-    await ctx.mod_actions.create(
-        actor_user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
+    await _audit.record(
+        ctx, actor_user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
     )
 
     return None
@@ -237,7 +261,8 @@ async def set_level_visibility(
 
     await ctx.levels.set_visibility(level_id, visibility)
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "visibility",
         ModTarget.LEVEL,
@@ -261,8 +286,8 @@ async def set_level_locked(
 
     await ctx.levels.set_update_locked(level_id, locked=locked)
 
-    await ctx.mod_actions.create(
-        actor_user_id, "lock", ModTarget.LEVEL, level_id, {"locked": locked}
+    await _audit.record(
+        ctx, actor_user_id, "lock", ModTarget.LEVEL, level_id, {"locked": locked}
     )
 
     return None
@@ -277,8 +302,8 @@ async def resolve_reports(
         return refused
 
     await ctx.reports.resolve_for_level(level_id, actor_user_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "resolve_reports", ModTarget.LEVEL, level_id
+    await _audit.record(
+        ctx, actor_user_id, "resolve_reports", ModTarget.LEVEL, level_id
     )
 
     return None
@@ -293,9 +318,7 @@ async def dismiss_suggestions(
         return refused
 
     await ctx.suggestions.resolve_for_level(level_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "dismiss_send", ModTarget.LEVEL, level_id
-    )
+    await _audit.record(ctx, actor_user_id, "dismiss_send", ModTarget.LEVEL, level_id)
 
     return None
 
@@ -312,9 +335,7 @@ async def remove_timely(
         return AdministrationError.NOT_FOUND
 
     await ctx.timely.soft_delete(timely_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "remove", ModTarget.TIMELY_LEVEL, timely_id
-    )
+    await _audit.record(ctx, actor_user_id, "remove", ModTarget.TIMELY_LEVEL, timely_id)
 
     return None
 
@@ -332,8 +353,8 @@ async def set_song_disabled(
 
     await ctx.songs.set_disabled(song_id, disabled=disabled)
 
-    await ctx.mod_actions.create(
-        actor_user_id, "disable", ModTarget.SONG, song_id, {"disabled": disabled}
+    await _audit.record(
+        ctx, actor_user_id, "disable", ModTarget.SONG, song_id, {"disabled": disabled}
     )
 
     return None
@@ -393,7 +414,8 @@ async def create_song(
             case _:
                 return AdministrationError.INVALID
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "create",
         ModTarget.SONG,
@@ -440,7 +462,8 @@ async def update_song(
         url=url,
     )
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "update",
         ModTarget.SONG,
@@ -471,7 +494,8 @@ async def create_quest(
     quest_id = await ctx.quests.create(
         item=item, amount=amount, diamonds=diamonds, name=name.strip()[:64]
     )
-    await ctx.mod_actions.create(actor_user_id, "create", ModTarget.QUEST, quest_id)
+
+    await _audit.record(ctx, actor_user_id, "create", ModTarget.QUEST, quest_id)
 
     return quest_id
 
@@ -488,7 +512,7 @@ async def remove_quest(
         return AdministrationError.NOT_FOUND
 
     await ctx.quests.soft_delete(quest_id)
-    await ctx.mod_actions.create(actor_user_id, "remove", ModTarget.QUEST, quest_id)
+    await _audit.record(ctx, actor_user_id, "remove", ModTarget.QUEST, quest_id)
 
     return None
 
@@ -529,8 +553,8 @@ async def create_secret_reward(
     for item, amount in items:
         await ctx.secret_rewards.add_item(reward_id, item, amount)
 
-    await ctx.mod_actions.create(
-        actor_user_id, "create", ModTarget.SECRET_REWARD, reward_id
+    await _audit.record(
+        ctx, actor_user_id, "create", ModTarget.SECRET_REWARD, reward_id
     )
 
     return reward_id
@@ -545,8 +569,8 @@ async def remove_secret_reward(
         return refused
 
     await ctx.secret_rewards.soft_delete(reward_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "remove", ModTarget.SECRET_REWARD, reward_id
+    await _audit.record(
+        ctx, actor_user_id, "remove", ModTarget.SECRET_REWARD, reward_id
     )
 
     return None
@@ -586,7 +610,7 @@ async def create_role(
 
     role_id = await ctx.roles.create(name, description.strip()[:255], priority)
     await ctx.roles.replace_permissions(role_id, valid)
-    await ctx.mod_actions.create(actor_user_id, "create", ModTarget.ROLE, role_id)
+    await _audit.record(ctx, actor_user_id, "create", ModTarget.ROLE, role_id)
     role = await ctx.roles.find_by_id(role_id)
 
     if role is None:
@@ -631,13 +655,14 @@ async def update_role(
     await ctx.roles.update(
         role_id, name=name, description=description.strip()[:255], priority=priority
     )
+
     await ctx.roles.replace_permissions(role_id, valid)
 
     for member_id in await ctx.roles.list_member_ids(role_id):
         await ctx.permissions.invalidate(member_id)
 
-    await ctx.mod_actions.create(
-        actor_user_id, "update", ModTarget.ROLE, role_id, {"permissions": valid}
+    await _audit.record(
+        ctx, actor_user_id, "update", ModTarget.ROLE, role_id, {"permissions": valid}
     )
 
     return None
@@ -660,7 +685,7 @@ async def remove_role(
     for member_id in members:
         await ctx.permissions.invalidate(member_id)
 
-    await ctx.mod_actions.create(actor_user_id, "remove", ModTarget.ROLE, role_id)
+    await _audit.record(ctx, actor_user_id, "remove", ModTarget.ROLE, role_id)
 
     return None
 
@@ -677,7 +702,7 @@ async def remove_map_pack(
         return AdministrationError.NOT_FOUND
 
     await ctx.map_packs.soft_delete(pack_id)
-    await ctx.mod_actions.create(actor_user_id, "remove", ModTarget.MAP_PACK, pack_id)
+    await _audit.record(ctx, actor_user_id, "remove", ModTarget.MAP_PACK, pack_id)
 
     return None
 
@@ -694,9 +719,7 @@ async def remove_gauntlet(
         return AdministrationError.NOT_FOUND
 
     await ctx.gauntlets.soft_delete(gauntlet_id)
-    await ctx.mod_actions.create(
-        actor_user_id, "remove", ModTarget.GAUNTLET, gauntlet_id
-    )
+    await _audit.record(ctx, actor_user_id, "remove", ModTarget.GAUNTLET, gauntlet_id)
 
     return None
 
@@ -710,8 +733,13 @@ async def rebuild_leaderboards(
         return refused
 
     total = await leaderboards.rebuild(ctx)
-    await ctx.mod_actions.create(
-        actor_user_id, "rebuild_leaderboards", ModTarget.SERVER, 0, {"users": total}
+    await _audit.record(
+        ctx,
+        actor_user_id,
+        "rebuild_leaderboards",
+        ModTarget.SERVER,
+        0,
+        {"users": total},
     )
 
     return total

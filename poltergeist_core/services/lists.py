@@ -19,6 +19,7 @@ from poltergeist_core.resources import ListOrder
 from poltergeist_core.resources import ListSearch
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.services import _audit
 from poltergeist_core.services import _wire
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -279,8 +280,6 @@ async def delete(
     await ctx.level_lists.soft_delete(level_list.id)
 
     if not is_owner:
-        await ctx.mod_actions.create(
-            user_id, "delete", ModTarget.LEVEL_LIST, level_list.id
-        )
+        await _audit.record(ctx, user_id, "delete", ModTarget.LEVEL_LIST, level_list.id)
 
     return None

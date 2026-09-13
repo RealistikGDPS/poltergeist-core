@@ -5,8 +5,12 @@ from http import HTTPStatus
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import Role
+from poltergeist_core.resources import RoleAssigned
+from poltergeist_core.resources import RoleRevoked
+from poltergeist_core.services import _audit
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
+from poltergeist_core.utilities import clock
 from poltergeist_core.utilities import logging
 
 logger = logging.get_logger(__name__)
@@ -54,7 +58,9 @@ async def assign(
     if role is None:
         return RoleError.NOT_FOUND
 
-    if await ctx.users.find_by_id(target_user_id) is None:
+    target = await ctx.users.find_by_id(target_user_id)
+
+    if target is None:
         return RoleError.USER_NOT_FOUND
 
     if not await _may_manage(ctx, actor_user_id, role):
@@ -63,14 +69,27 @@ async def assign(
     await ctx.roles.assign(
         target_user_id, role.id, granted_by_user_id=actor_user_id, expires_at=expires_at
     )
+
     await ctx.permissions.invalidate(target_user_id)
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "assign",
         ModTarget.ROLE,
         role.id,
         {"user_id": target_user_id},
+    )
+
+    await ctx.events.publish(
+        RoleAssigned(
+            user_id=target_user_id,
+            username=target.username,
+            role_id=role.id,
+            role_name=role.name,
+            expires_at=None if expires_at is None else clock.timestamp(expires_at),
+            actor_user_id=actor_user_id,
+        )
     )
 
     logger.info(
@@ -104,12 +123,22 @@ async def revoke(
 
     await ctx.permissions.invalidate(target_user_id)
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "revoke",
         ModTarget.ROLE,
         role.id,
         {"user_id": target_user_id},
+    )
+
+    await ctx.events.publish(
+        RoleRevoked(
+            user_id=target_user_id,
+            role_id=role.id,
+            role_name=role.name,
+            actor_user_id=actor_user_id,
+        )
     )
 
     return role

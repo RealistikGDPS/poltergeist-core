@@ -14,6 +14,7 @@ from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Comment
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.services import _audit
 from poltergeist_core.services import _badges
 from poltergeist_core.services import _wire
 from poltergeist_core.services import commands
@@ -215,18 +216,15 @@ async def delete_level_comment(
         level_list = await ctx.level_lists.find_by_id(comment.list_id)
         allowed = level_list is not None and level_list.user_id == user_id
 
-    if not allowed:
-        allowed = await ctx.permissions.has(user_id, Permission.COMMENTS_DELETE_ANY)
-
-        if allowed:
-            await ctx.mod_actions.create(
-                user_id, "delete", ModTarget.COMMENT, comment.id
-            )
-
-    if not allowed:
+    if not allowed and not await ctx.permissions.has(
+        user_id, Permission.COMMENTS_DELETE_ANY
+    ):
         return CommentError.NOT_PERMITTED
 
     await ctx.comments.soft_delete(comment.id)
+
+    if not allowed:
+        await _audit.record(ctx, user_id, "delete", ModTarget.COMMENT, comment.id)
 
     return None
 
@@ -329,15 +327,17 @@ async def delete_account_comment(
 
     user_id = session.user.id
 
-    if comment.user_id != user_id:
-        if not await ctx.permissions.has(user_id, Permission.PROFILE_DELETE_ANY):
-            return CommentError.NOT_PERMITTED
-
-        await ctx.mod_actions.create(
-            user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
-        )
+    if comment.user_id != user_id and not await ctx.permissions.has(
+        user_id, Permission.PROFILE_DELETE_ANY
+    ):
+        return CommentError.NOT_PERMITTED
 
     await ctx.account_comments.soft_delete(comment.id)
+
+    if comment.user_id != user_id:
+        await _audit.record(
+            ctx, user_id, "delete", ModTarget.ACCOUNT_COMMENT, comment.id
+        )
 
     return None
 

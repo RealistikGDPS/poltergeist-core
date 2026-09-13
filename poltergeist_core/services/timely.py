@@ -11,6 +11,8 @@ from gdformat.enums import TimelyType
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import TimelyLevel
+from poltergeist_core.resources import TimelyScheduled
+from poltergeist_core.services import _audit
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 from poltergeist_core.utilities import clock
@@ -108,7 +110,13 @@ async def schedule(
         for item, amount in _EVENT_REWARDS:
             await ctx.timely.add_reward(timely_id, item, amount)
 
-    await ctx.mod_actions.create(
+    entry = await ctx.timely.find_by_id(timely_id)
+
+    if entry is None:
+        return TimelyError.NOT_FOUND
+
+    await _audit.record(
+        ctx,
         actor_user_id,
         "schedule",
         ModTarget.TIMELY_LEVEL,
@@ -116,10 +124,18 @@ async def schedule(
         {"type": int(timely_type), "level_id": level.id},
     )
 
-    entry = await ctx.timely.find_by_id(timely_id)
-
-    if entry is None:
-        return TimelyError.NOT_FOUND
+    await ctx.events.publish(
+        TimelyScheduled(
+            timely_id=entry.id,
+            timely_type=entry.type,
+            sequence=entry.sequence,
+            level_id=level.id,
+            level_name=level.name,
+            starts_at=clock.timestamp(entry.starts_at),
+            ends_at=clock.timestamp(entry.ends_at),
+            actor_user_id=actor_user_id,
+        )
+    )
 
     return entry
 

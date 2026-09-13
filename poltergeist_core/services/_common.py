@@ -21,6 +21,7 @@ from poltergeist_core.resources import FriendRequestRepository
 from poltergeist_core.resources import FriendshipRepository
 from poltergeist_core.resources import GauntletRepository
 from poltergeist_core.resources import HealthRepository
+from poltergeist_core.resources import ImplementsEventPublisher
 from poltergeist_core.resources import LeaderboardRepository
 from poltergeist_core.resources import LevelDataRepository
 from poltergeist_core.resources import LevelListRepository
@@ -103,6 +104,10 @@ class AbstractContext(ABC):
     @property
     @abstractmethod
     def boomlings(self) -> BoomlingsClient: ...
+
+    @property
+    @abstractmethod
+    def events(self) -> ImplementsEventPublisher: ...
 
     @property
     def users(self) -> UserRepository:

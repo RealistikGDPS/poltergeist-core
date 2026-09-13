@@ -7,6 +7,7 @@ from gdformat.enums import MapPackDifficulty
 
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.services import _audit
 from poltergeist_core.services import _wire
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -93,9 +94,10 @@ async def create_map_pack(
         text_colour=text_colour,
         bar_colour=bar_colour,
     )
+
     await ctx.map_packs.replace_levels(pack_id, levels)
 
-    await ctx.mod_actions.create(actor_user_id, "create", ModTarget.MAP_PACK, pack_id)
+    await _audit.record(ctx, actor_user_id, "create", ModTarget.MAP_PACK, pack_id)
 
     return pack_id
 
@@ -117,6 +119,6 @@ async def set_gauntlet(
 
     await ctx.gauntlets.upsert(gauntlet_id, levels)
 
-    await ctx.mod_actions.create(actor_user_id, "set", ModTarget.GAUNTLET, gauntlet_id)
+    await _audit.record(ctx, actor_user_id, "set", ModTarget.GAUNTLET, gauntlet_id)
 
     return None

@@ -1,5 +1,6 @@
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import LeaderboardKind
+from poltergeist_core.resources import LeaderboardsRebuilt
 from poltergeist_core.resources import Permission
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.utilities import logging
@@ -51,6 +52,8 @@ async def rebuild(ctx: AbstractContext) -> int:
                 },
             )
             total += 1
+
+    await ctx.events.publish(LeaderboardsRebuilt(users=total))
 
     logger.info("Rebuilt the leaderboards.", extra={"users": total})
 

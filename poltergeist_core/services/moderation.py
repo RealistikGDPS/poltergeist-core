@@ -12,9 +12,14 @@ from gdformat.requests import SuggestStarsRequest
 
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Level
+from poltergeist_core.resources import LevelRated
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.resources import User
+from poltergeist_core.resources import UserBanned
 from poltergeist_core.resources import UserKind
+from poltergeist_core.resources import UserUnbanned
+from poltergeist_core.services import _audit
 from poltergeist_core.services import _wire
 from poltergeist_core.services import users
 from poltergeist_core.services._common import AbstractContext
@@ -81,6 +86,20 @@ async def refresh_creator_points(ctx: AbstractContext, user_id: int) -> None:
     await users.sync_leaderboards(ctx, user_id)
 
 
+def _rated(level: Level, creator: User, actor_user_id: int) -> LevelRated:
+    return LevelRated(
+        level_id=level.id,
+        level_name=level.name,
+        user_id=level.user_id,
+        username=creator.username,
+        stars=level.stars,
+        difficulty=level.difficulty,
+        rating=level.rating,
+        feature_order=level.feature_order,
+        actor_user_id=actor_user_id,
+    )
+
+
 async def rate_level(
     ctx: AbstractContext,
     *,
@@ -99,6 +118,11 @@ async def rate_level(
     level = await ctx.levels.find_by_id(level_id)
 
     if level is None:
+        return ModerationError.NOT_FOUND
+
+    creator = await ctx.users.find_by_id(level.user_id)
+
+    if creator is None:
         return ModerationError.NOT_FOUND
 
     if stars != level.stars and not await ctx.permissions.has(
@@ -152,10 +176,16 @@ async def rate_level(
         rating=rating,
         rated_by_user_id=actor_user_id,
     )
+
     await ctx.suggestions.resolve_for_level(level.id)
     await refresh_creator_points(ctx, level.user_id)
+    updated = await ctx.levels.find_by_id(level.id)
 
-    await ctx.mod_actions.create(
+    if updated is None:
+        return ModerationError.NOT_FOUND
+
+    await _audit.record(
+        ctx,
         actor_user_id,
         "rate",
         ModTarget.LEVEL,
@@ -166,10 +196,8 @@ async def rate_level(
             "demon": None if demon is None else int(demon),
         },
     )
-    updated = await ctx.levels.find_by_id(level.id)
 
-    if updated is None:
-        return ModerationError.NOT_FOUND
+    await ctx.events.publish(_rated(updated, creator, actor_user_id))
 
     return updated
 
@@ -229,12 +257,25 @@ async def rate_demon(
     if not level.difficulty.is_demon:
         return ModerationError.INVALID
 
-    await ctx.levels.set_difficulty(
-        level.id, Difficulty(_DEMON_OFFSET + request.rating)
+    creator = await ctx.users.find_by_id(level.user_id)
+
+    if creator is None:
+        return ModerationError.NOT_FOUND
+
+    difficulty = Difficulty(_DEMON_OFFSET + request.rating)
+    await ctx.levels.set_difficulty(level.id, difficulty)
+
+    await _audit.record(
+        ctx,
+        actor,
+        "rate_demon",
+        ModTarget.LEVEL,
+        level.id,
+        {"rating": int(request.rating)},
     )
 
-    await ctx.mod_actions.create(
-        actor, "rate_demon", ModTarget.LEVEL, level.id, {"rating": int(request.rating)}
+    await ctx.events.publish(
+        _rated(level.model_copy(update={"difficulty": difficulty}), creator, actor)
     )
 
     return level.id
@@ -269,7 +310,9 @@ async def ban(
     if not await ctx.permissions.has(actor_user_id, _ban_permission(ban_type)):
         return ModerationError.NOT_PERMITTED
 
-    if await ctx.users.find_by_id(target_user_id) is None:
+    target = await ctx.users.find_by_id(target_user_id)
+
+    if target is None:
         return ModerationError.NOT_FOUND
 
     if not await outranks(ctx, actor_user_id, target_user_id):
@@ -279,11 +322,12 @@ async def ban(
         return ModerationError.INVALID
 
     expires_at = None if days is None else clock.now() + timedelta(days=days)
+    reason = reason.strip()[:_REASON_MAX]
 
     ban_id = await ctx.bans.create(
         target_user_id,
         ban_type,
-        reason=reason.strip()[:_REASON_MAX],
+        reason=reason,
         issued_by_user_id=actor_user_id,
         expires_at=expires_at,
     )
@@ -297,13 +341,28 @@ async def ban(
         case _:
             pass
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "ban",
         ModTarget.USER,
         target_user_id,
         {"ban_id": ban_id, "type": ban_type.value, "days": days},
     )
+
+    await ctx.events.publish(
+        UserBanned(
+            ban_id=ban_id,
+            user_id=target_user_id,
+            username=target.username,
+            ban_type=ban_type,
+            reason=reason,
+            days=days,
+            expires_at=None if expires_at is None else clock.timestamp(expires_at),
+            actor_user_id=actor_user_id,
+        )
+    )
+
     logger.info(
         "User banned.",
         extra={"user_id": target_user_id, "type": ban_type.value, "by": actor_user_id},
@@ -322,7 +381,9 @@ async def unban(
     if not await ctx.permissions.has(actor_user_id, Permission.USERS_UNBAN):
         return ModerationError.NOT_PERMITTED
 
-    if await ctx.users.find_by_id(target_user_id) is None:
+    target = await ctx.users.find_by_id(target_user_id)
+
+    if target is None:
         return ModerationError.NOT_FOUND
 
     revoked = await ctx.bans.revoke_active(
@@ -332,13 +393,25 @@ async def unban(
     if ban_type in (BanType.LEADERBOARD, BanType.CREATOR):
         await users.sync_leaderboards(ctx, target_user_id)
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "unban",
         ModTarget.USER,
         target_user_id,
         {"type": ban_type.value, "revoked": revoked},
     )
+
+    if revoked > 0:
+        await ctx.events.publish(
+            UserUnbanned(
+                user_id=target_user_id,
+                username=target.username,
+                ban_type=ban_type,
+                revoked=revoked,
+                actor_user_id=actor_user_id,
+            )
+        )
 
     return revoked
 
@@ -366,13 +439,15 @@ async def set_user_kind(
 
     await ctx.users.update_kind(target_user_id, kind)
     await users.sync_leaderboards(ctx, target_user_id)
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         actor_user_id,
         "kind",
         ModTarget.USER,
         target_user_id,
         {"kind": kind.value},
     )
+
     logger.info(
         "User kind changed.",
         extra={"user_id": target_user_id, "kind": kind.value, "by": actor_user_id},

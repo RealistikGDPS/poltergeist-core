@@ -4,6 +4,8 @@ from http import HTTPStatus
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import ServerSettings
+from poltergeist_core.resources import ServerSettingsUpdated
+from poltergeist_core.services import _audit
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 
@@ -78,8 +80,10 @@ async def update(
         )
 
     await ctx.server_settings.invalidate()
-    await ctx.mod_actions.create(
-        actor_user_id, "settings", ModTarget.SERVER, 0, changes
+    await _audit.record(ctx, actor_user_id, "settings", ModTarget.SERVER, 0, changes)
+
+    await ctx.events.publish(
+        ServerSettingsUpdated(changes=changes, actor_user_id=actor_user_id)
     )
 
     return settings

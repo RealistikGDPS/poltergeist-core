@@ -24,11 +24,15 @@ from gdformat.requests import UploadLevelRequest
 from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Level
+from poltergeist_core.resources import LevelDeleted
 from poltergeist_core.resources import LevelOrder
 from poltergeist_core.resources import LevelSearch
+from poltergeist_core.resources import LevelUpdated
+from poltergeist_core.resources import LevelUploaded
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import User
+from poltergeist_core.services import _audit
 from poltergeist_core.services import _wire
 from poltergeist_core.services import server_settings
 from poltergeist_core.services import songs
@@ -614,11 +618,13 @@ async def upload(
         original_id = None
 
     if existing is None:
+        version = max(request.version, 1)
+
         level_id = await ctx.levels.create(
             user_id=user_id,
             name=name,
             description=request.description,
-            version=max(request.version, 1),
+            version=version,
             length=request.length,
             official_song_id=request.official_song,
             custom_song_id=custom_song_id,
@@ -642,11 +648,12 @@ async def upload(
             return LevelError.LOCKED
 
         level_id = existing.id
+        version = max(request.version, existing.version)
 
         await ctx.levels.update(
             level_id,
             description=request.description,
-            version=max(request.version, existing.version),
+            version=version,
             length=request.length,
             official_song_id=request.official_song,
             custom_song_id=custom_song_id,
@@ -683,6 +690,18 @@ async def upload(
         has_replay=bool(request.replay),
     )
 
+    event_type = LevelUploaded if existing is None else LevelUpdated
+
+    await ctx.events.publish(
+        event_type(
+            level_id=level_id,
+            level_name=name,
+            user_id=user_id,
+            username=session.user.username,
+            version=version,
+        )
+    )
+
     logger.info(
         "Level uploaded.",
         extra={
@@ -714,7 +733,16 @@ async def delete(
     await ctx.levels.soft_delete(level.id)
 
     if not is_owner:
-        await ctx.mod_actions.create(user_id, "delete", ModTarget.LEVEL, level.id)
+        await _audit.record(ctx, user_id, "delete", ModTarget.LEVEL, level.id)
+
+    await ctx.events.publish(
+        LevelDeleted(
+            level_id=level.id,
+            level_name=level.name,
+            user_id=level.user_id,
+            actor_user_id=user_id,
+        )
+    )
 
     logger.info("Level deleted.", extra={"level_id": level.id, "user_id": user_id})
 

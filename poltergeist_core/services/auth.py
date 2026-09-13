@@ -18,6 +18,8 @@ from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import User
 from poltergeist_core.resources import UserCredential
+from poltergeist_core.resources import UserRegistered
+from poltergeist_core.resources import UserRenamed
 from poltergeist_core.services import server_settings
 from poltergeist_core.services._common import GD_FAILURE
 from poltergeist_core.services._common import AbstractContext
@@ -336,6 +338,8 @@ async def register(
             user_id, default_role.id, granted_by_user_id=None, expires_at=None
         )
 
+    await ctx.events.publish(UserRegistered(user_id=user_id, username=name))
+
     logger.info("User registered.", extra={"user_id": user_id})
 
     return user_id
@@ -523,6 +527,16 @@ async def rename(
     await ctx.username_changes.create(
         user_id, user.username, username, changed_by_user_id=user_id
     )
+
+    await ctx.events.publish(
+        UserRenamed(
+            user_id=user_id,
+            old_username=user.username,
+            new_username=username,
+            actor_user_id=user_id,
+        )
+    )
+
     logger.info("User renamed.", extra={"user_id": user_id})
 
     return user.model_copy(update={"username": username})

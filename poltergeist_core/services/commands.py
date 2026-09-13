@@ -8,9 +8,11 @@ from gdformat.enums import Visibility
 from poltergeist_core import settings
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Level
+from poltergeist_core.resources import LevelDeleted
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import User
+from poltergeist_core.services import _audit
 from poltergeist_core.services import moderation
 from poltergeist_core.services import roles
 from poltergeist_core.services import timely
@@ -232,7 +234,8 @@ async def _set_visibility(
 
     await ctx.levels.set_visibility(level.id, visibility)
 
-    await ctx.mod_actions.create(
+    await _audit.record(
+        ctx,
         session.user.id,
         "visibility",
         ModTarget.LEVEL,
@@ -268,7 +271,16 @@ async def _delete(ctx: AbstractContext, session: Session, level_id: int) -> str:
         return "You may not delete this level."
 
     await ctx.levels.soft_delete(level.id)
-    await ctx.mod_actions.create(session.user.id, "delete", ModTarget.LEVEL, level.id)
+    await _audit.record(ctx, session.user.id, "delete", ModTarget.LEVEL, level.id)
+
+    await ctx.events.publish(
+        LevelDeleted(
+            level_id=level.id,
+            level_name=level.name,
+            user_id=level.user_id,
+            actor_user_id=session.user.id,
+        )
+    )
 
     return f"Deleted {level.name}."
 
@@ -290,8 +302,8 @@ async def _move(
     await moderation.refresh_creator_points(ctx, level.user_id)
     await moderation.refresh_creator_points(ctx, target.id)
 
-    await ctx.mod_actions.create(
-        session.user.id, "move", ModTarget.LEVEL, level.id, {"user_id": target.id}
+    await _audit.record(
+        ctx, session.user.id, "move", ModTarget.LEVEL, level.id, {"user_id": target.id}
     )
 
     return f"Moved {level.name} to {target.username}."
