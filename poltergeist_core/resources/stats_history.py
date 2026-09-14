@@ -94,6 +94,17 @@ class StatsHistoryRepository:
 
         return None if row is None else StatsHistoryEntry.model_validate(row)
 
+    async def find_before(
+        self, user_id: int, history_id: int
+    ) -> StatsHistoryEntry | None:
+        row = await self._mysql.fetch_one(
+            f"SELECT {_COLUMNS} FROM user_stats_history WHERE user_id = %(id)s "
+            "AND id < %(before)s ORDER BY id DESC LIMIT 1",
+            {"id": user_id, "before": history_id},
+        )
+
+        return None if row is None else StatsHistoryEntry.model_validate(row)
+
     async def list_by_user(
         self, user_id: int, page: int, size: int
     ) -> list[StatsHistoryEntry]:
