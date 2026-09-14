@@ -63,6 +63,16 @@ async def update(
     ):
         return ServerSettingsError.INVALID
 
+    allowances = (
+        settings.official_stars,
+        settings.official_moons,
+        settings.official_demons,
+        settings.official_secret_coins,
+    )
+
+    if any(value < 0 for value in allowances):
+        return ServerSettingsError.INVALID
+
     before = (await ctx.server_settings.load()).model_dump()
 
     changes = {

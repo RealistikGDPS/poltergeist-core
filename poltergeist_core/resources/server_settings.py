@@ -18,6 +18,14 @@ class ServerSettings(Model):
     level_reupload_enabled: bool = False
     download_pc_url: str = ""
     download_android_url: str = ""
+    # What the official main levels award, added to the rated content when
+    # checking a profile against the ceilings. The 22 main levels give 199
+    # stars, 66 secret coins and 3 demons; raise these if the client's extra
+    # levels are found to add more.
+    official_stars: int = 199
+    official_moons: int = 0
+    official_demons: int = 3
+    official_secret_coins: int = 66
 
 
 class ServerSettingRepository:

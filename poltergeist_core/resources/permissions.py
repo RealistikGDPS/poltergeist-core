@@ -48,6 +48,8 @@ class Permission(StrEnum):
     USERS_EDIT_ANY = "users.edit_any"
     SCORES_SUBMIT = "scores.submit"
     STATS_UPDATE = "stats.update"
+    STATS_RESTORE = "stats.restore"
+    FLAGS_REVIEW = "flags.review"
     LEADERBOARD_RANK = "leaderboard.rank"
     REWARDS_CLAIM = "rewards.claim"
     QUESTS_VIEW = "quests.view"

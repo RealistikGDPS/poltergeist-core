@@ -11,6 +11,7 @@ from gdformat.enums import TimelyType
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources.bans import BanType
+from poltergeist_core.resources.flags import FlagKind
 from poltergeist_core.resources.mod_actions import ModTarget
 from poltergeist_core.utilities import clock
 
@@ -66,6 +67,18 @@ class UserUnbanned(Event):
     ban_type: BanType
     revoked: int
     actor_user_id: int
+
+
+class UserFlagged(Event):
+    """`summary` is the evidence in one line; the row holds the detail."""
+
+    kind: ClassVar[str] = "users.flagged"
+
+    flag_id: int
+    user_id: int
+    username: str
+    flag_kind: FlagKind
+    summary: str
 
 
 class LevelUploaded(Event):

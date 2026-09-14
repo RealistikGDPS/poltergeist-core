@@ -2,12 +2,14 @@ from . import account_comments
 from . import analytics
 from . import bans
 from . import blocks
+from . import ceilings
 from . import chests
 from . import comments
 from . import credentials
 from . import devices
 from . import download_marks
 from . import events
+from . import flags
 from . import friend_requests
 from . import friendships
 from . import gauntlets
@@ -17,6 +19,7 @@ from . import level_data
 from . import level_lists
 from . import levels
 from . import likes
+from . import logins
 from . import map_packs
 from . import messages
 from . import mod_actions
@@ -34,6 +37,7 @@ from . import song_lookups
 from . import songs
 from . import star_votes
 from . import stats
+from . import stats_history
 from . import suggestions
 from . import timely
 from . import username_changes
@@ -54,6 +58,8 @@ from .bans import BanRepository
 from .bans import BanType
 from .bans import UserBan
 from .blocks import BlockRepository
+from .ceilings import CeilingRepository
+from .ceilings import StatCeilings
 from .chests import ChestClaim
 from .chests import ChestRepository
 from .comments import Comment
@@ -78,9 +84,14 @@ from .events import RoleRevoked
 from .events import ServerSettingsUpdated
 from .events import TimelyScheduled
 from .events import UserBanned
+from .events import UserFlagged
 from .events import UserRegistered
 from .events import UserRenamed
 from .events import UserUnbanned
+from .flags import FlagKind
+from .flags import FlagRepository
+from .flags import FlagStatus
+from .flags import UserFlag
 from .friend_requests import FriendRequest
 from .friend_requests import FriendRequestRepository
 from .friendships import Friendship
@@ -109,6 +120,9 @@ from .levels import RatedLevel
 from .likes import Like
 from .likes import LikeRepository
 from .likes import LikeTarget
+from .logins import LoginRepository
+from .logins import LoginSource
+from .logins import UserLogin
 from .map_packs import MapPack
 from .map_packs import MapPackRepository
 from .messages import Message
@@ -151,6 +165,10 @@ from .stats import RankedStats
 from .stats import StatsRepository
 from .stats import StatsUpdate
 from .stats import UserStats
+from .stats_history import StatsHistoryEntry
+from .stats_history import StatsHistoryRepository
+from .stats_history import StatsSnapshot
+from .stats_history import StatsSource
 from .suggestions import LevelSuggestion
 from .suggestions import SuggestionRepository
 from .timely import TimelyLevel

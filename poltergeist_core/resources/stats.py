@@ -3,6 +3,7 @@ from gdformat.enums import IconType
 from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources._common import placeholders
+from poltergeist_core.resources.stats_history import StatsSnapshot
 
 _COLUMNS = (
     "user_id, stars, moons, demons, diamonds, secret_coins, user_coins, "
@@ -195,6 +196,15 @@ class StatsRepository:
         values = update.model_dump()
         assignments = ", ".join(f"{column} = %({column})s" for column in values)
         values["icon_type"] = int(update.icon_type)
+
+        await self._mysql.execute(
+            f"UPDATE user_stats SET {assignments} WHERE user_id = %(user_id)s",
+            {**values, "user_id": user_id},
+        )
+
+    async def restore(self, user_id: int, snapshot: StatsSnapshot) -> None:
+        values = snapshot.model_dump()
+        assignments = ", ".join(f"{column} = %({column})s" for column in values)
 
         await self._mysql.execute(
             f"UPDATE user_stats SET {assignments} WHERE user_id = %(user_id)s",

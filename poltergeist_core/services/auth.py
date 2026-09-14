@@ -16,10 +16,12 @@ from gdformat.requests import RegisterRequest
 
 from poltergeist_core import settings
 from poltergeist_core.resources import BanType
+from poltergeist_core.resources import LoginSource
 from poltergeist_core.resources import User
 from poltergeist_core.resources import UserCredential
 from poltergeist_core.resources import UserRegistered
 from poltergeist_core.resources import UserRenamed
+from poltergeist_core.services import anticheat
 from poltergeist_core.services import server_settings
 from poltergeist_core.services._common import GD_FAILURE
 from poltergeist_core.services._common import AbstractContext
@@ -128,6 +130,15 @@ class AuthError(ServiceError, StrEnum):
                 return GD_FAILURE
 
 
+class _Verified(StrEnum):
+    """Whether a gjp2 was accepted, and if the acceptance cost a bcrypt check
+    rather than a cache hit, which is when a login is worth recording."""
+
+    CACHED = "cached"
+    FRESH = "fresh"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True, slots=True)
 class Session:
     """An authenticated request: who is asking and from which client."""
@@ -160,12 +171,12 @@ def _check_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-async def _verify(ctx: AbstractContext, user: User, gjp2: str) -> bool:
+async def _verify(ctx: AbstractContext, user: User, gjp2: str) -> _Verified:
     if not _GJP2_PATTERN.match(gjp2):
-        return False
+        return _Verified.FAILED
 
     if await ctx.sessions.is_verified(user.id, gjp2):
-        return True
+        return _Verified.CACHED
 
     within_limit = await ctx.rate_limits.hit(
         "login",
@@ -175,21 +186,21 @@ async def _verify(ctx: AbstractContext, user: User, gjp2: str) -> bool:
     )
 
     if not within_limit:
-        return False
+        return _Verified.FAILED
 
     credential = await ctx.credentials.find_by_user_id(user.id)
 
     if credential is None or credential.gjp2_bcrypt is None:
-        return False
+        return _Verified.FAILED
 
     if not await asyncio.to_thread(_check_gjp2, gjp2, credential.gjp2_bcrypt):
-        return False
+        return _Verified.FAILED
 
     await ctx.sessions.mark_verified(
         user.id, gjp2, seconds=settings.APP_SESSION_SECONDS
     )
 
-    return True
+    return _Verified.FRESH
 
 
 async def _verify_password(
@@ -198,7 +209,7 @@ async def _verify_password(
     """Checks a plaintext password against whichever hash the account holds."""
 
     if credential.gjp2_bcrypt is not None:
-        return await _verify(ctx, user, crypto.gjp2(password))
+        return await _verify(ctx, user, crypto.gjp2(password)) is not _Verified.FAILED
 
     if credential.legacy_password_bcrypt is None:
         return False
@@ -209,39 +220,45 @@ async def _verify_password(
 
 
 async def authenticate(
-    ctx: AbstractContext, auth: Auth, client: Client
+    ctx: AbstractContext, auth: Auth, client: Client, *, ip: str
 ) -> AuthError.OnSuccess[Session]:
     user = await ctx.users.find_by_id(auth.account_id)
 
     if user is None:
         return AuthError.UNAUTHENTICATED
 
-    if not await _verify(ctx, user, auth.gjp2):
+    verified = await _verify(ctx, user, auth.gjp2)
+
+    if verified is _Verified.FAILED:
         return AuthError.UNAUTHENTICATED
 
     if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
         return AuthError.BANNED
 
+    # A cached session was already recorded when it was first verified.
+    if verified is _Verified.FRESH:
+        await anticheat.note_login(ctx, user, client, ip=ip, source=LoginSource.GAME)
+
     return Session(user=user, client=client)
 
 
 async def login(
-    ctx: AbstractContext, request: LoginRequest
+    ctx: AbstractContext, request: LoginRequest, *, ip: str
 ) -> AuthError.OnSuccess[LoginResult]:
     user = await ctx.users.find_by_username(request.name.strip())
 
     if user is None:
         return AuthError.INVALID_CREDENTIALS
 
-    if not await _verify(ctx, user, request.gjp2):
+    if await _verify(ctx, user, request.gjp2) is _Verified.FAILED:
         return AuthError.INVALID_CREDENTIALS
 
     if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
         return AuthError.ACCOUNT_BANNED
 
-    if request.client.udid:
-        await ctx.devices.upsert(user.id, request.client.udid, request.client.platform)
-
+    await anticheat.note_login(
+        ctx, user, request.client, ip=ip, source=LoginSource.GAME
+    )
     await ctx.users.touch_last_seen(user.id)
     logger.info("User logged in.", extra={"user_id": user.id})
 
@@ -398,6 +415,7 @@ async def web_login(
         await ctx.credentials.upsert(user.id, hashed)
         logger.info("Legacy password migrated.", extra={"user_id": user.id})
 
+    await anticheat.note_login(ctx, user, Client(), ip=ip, source=LoginSource.WEB)
     await ctx.users.touch_last_seen(user.id)
     token = await ctx.web_sessions.create(user.id, seconds=WEB_SESSION_SECONDS)
     logger.info("User logged in through the web.", extra={"user_id": user.id})

@@ -8,10 +8,12 @@ from gdformat.enums import PlatformerMode
 from gdformat.requests import LevelScoresRequest
 
 from poltergeist_core.resources import BanType
+from poltergeist_core.resources import Level
 from poltergeist_core.resources import LevelScore
 from poltergeist_core.resources import Permission
 from poltergeist_core.resources import PlatformerScore
 from poltergeist_core.services import _wire
+from poltergeist_core.services import anticheat
 from poltergeist_core.services import timely
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
@@ -51,7 +53,7 @@ async def _submit_classic(
     session: Session,
     request: LevelScoresRequest,
     timely_level_id: int | None,
-    max_coins: int,
+    level: Level,
 ) -> None:
     percent = request.percent
 
@@ -86,9 +88,13 @@ async def _submit_classic(
         attempts=max(request.attempts, 0),
         clicks=max(request.clicks, 0),
         seconds=max(request.seconds, 0),
-        coins=min(max(request.coins, 0), max_coins),
+        coins=min(max(request.coins, 0), level.coins),
         progress=list(request.progress),
         level_version=request.level_version,
+    )
+
+    await anticheat.note_classic_score(
+        ctx, session.user, level, request, percent=percent
     )
 
 
@@ -262,7 +268,7 @@ async def level_scores(
             ],
         )
 
-    await _submit_classic(ctx, session, request, timely_level_id, level.coins)
+    await _submit_classic(ctx, session, request, timely_level_id, level)
     classic_rows = await _classic_board(ctx, session, request, timely_level_id)
 
     return await _rows(

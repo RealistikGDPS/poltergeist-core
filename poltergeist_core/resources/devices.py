@@ -50,3 +50,15 @@ class DeviceRepository:
         )
 
         return [int(row["user_id"]) for row in rows]
+
+    async def list_user_ids_sharing(self, user_id: int) -> list[int]:
+        """Other users that have logged in from one of this user's devices."""
+
+        rows = await self._mysql.fetch_all(
+            "SELECT DISTINCT other.user_id FROM user_devices own "
+            "JOIN user_devices other ON other.udid = own.udid "
+            "WHERE own.user_id = %(id)s AND other.user_id <> %(id)s",
+            {"id": user_id},
+        )
+
+        return [int(row["user_id"]) for row in rows]

@@ -24,6 +24,7 @@ from poltergeist_core.resources import UserKind
 from poltergeist_core.resources import UserStats
 from poltergeist_core.services import _badges
 from poltergeist_core.services import _wire
+from poltergeist_core.services import anticheat
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 from poltergeist_core.services.auth import Session
@@ -360,7 +361,13 @@ async def update_stats(
         **await _demon_breakdown(ctx, request),
     )
 
+    before = await ctx.stats.find_by_user_id(user_id)
     await ctx.stats.update(user_id, update)
+    after = await ctx.stats.find_by_user_id(user_id)
+
+    if before is not None and after is not None:
+        await anticheat.note_stats(ctx, session.user, before, after)
+
     await ctx.users.touch_last_seen(user_id)
     await sync_leaderboards(ctx, user_id)
 

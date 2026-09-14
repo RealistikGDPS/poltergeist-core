@@ -70,6 +70,7 @@ consumer that is offline misses the message.
 | `users.renamed` | `user_id`, `old_username`, `new_username`, `actor_user_id` (the user for a self-service rename) |
 | `users.banned` | `ban_id`, `user_id`, `username`, `ban_type`, `reason`, `days`, `expires_at`, `actor_user_id` |
 | `users.unbanned` | `user_id`, `username`, `ban_type`, `revoked` (bans lifted), `actor_user_id` |
+| `users.flagged` | `flag_id`, `user_id`, `username`, `flag_kind` (`stats_ceiling`, `score_implausible`, `alt_account`), `summary` (one line, never an address); the write that raised the flag went through |
 | `levels.uploaded` | `level_id`, `level_name`, `user_id`, `username`, `version` |
 | `levels.updated` | same as `levels.uploaded`, for a re-upload of an existing level |
 | `levels.deleted` | `level_id`, `level_name`, `user_id` (the creator), `actor_user_id` |

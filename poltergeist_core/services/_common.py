@@ -12,11 +12,13 @@ from poltergeist_core.resources import AnalyticsRepository
 from poltergeist_core.resources import ArtistRepository
 from poltergeist_core.resources import BanRepository
 from poltergeist_core.resources import BlockRepository
+from poltergeist_core.resources import CeilingRepository
 from poltergeist_core.resources import ChestRepository
 from poltergeist_core.resources import CommentRepository
 from poltergeist_core.resources import CredentialRepository
 from poltergeist_core.resources import DeviceRepository
 from poltergeist_core.resources import DownloadMarkRepository
+from poltergeist_core.resources import FlagRepository
 from poltergeist_core.resources import FriendRequestRepository
 from poltergeist_core.resources import FriendshipRepository
 from poltergeist_core.resources import GauntletRepository
@@ -28,6 +30,7 @@ from poltergeist_core.resources import LevelListRepository
 from poltergeist_core.resources import LevelRepository
 from poltergeist_core.resources import LevelScoreRepository
 from poltergeist_core.resources import LikeRepository
+from poltergeist_core.resources import LoginRepository
 from poltergeist_core.resources import MapPackRepository
 from poltergeist_core.resources import MessageRepository
 from poltergeist_core.resources import ModActionRepository
@@ -44,6 +47,7 @@ from poltergeist_core.resources import SessionRepository
 from poltergeist_core.resources import SongLookupRepository
 from poltergeist_core.resources import SongRepository
 from poltergeist_core.resources import StarVoteRepository
+from poltergeist_core.resources import StatsHistoryRepository
 from poltergeist_core.resources import StatsRepository
 from poltergeist_core.resources import SuggestionRepository
 from poltergeist_core.resources import TimelyRepository
@@ -132,6 +136,22 @@ class AbstractContext(ABC):
     @property
     def stats(self) -> StatsRepository:
         return StatsRepository(self._mysql)
+
+    @property
+    def stats_history(self) -> StatsHistoryRepository:
+        return StatsHistoryRepository(self._mysql)
+
+    @property
+    def logins(self) -> LoginRepository:
+        return LoginRepository(self._mysql)
+
+    @property
+    def flags(self) -> FlagRepository:
+        return FlagRepository(self._mysql)
+
+    @property
+    def ceilings(self) -> CeilingRepository:
+        return CeilingRepository(self._mysql, self._redis)
 
     @property
     def saves(self) -> SaveRepository:
