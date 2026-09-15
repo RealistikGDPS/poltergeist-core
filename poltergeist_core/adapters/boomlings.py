@@ -30,11 +30,20 @@ type BoomlingsResult[T] = T | BoomlingsError
 class BoomlingsClient:
     """A client for the official Geometry Dash servers."""
 
-    def __init__(self, *, base_url: str, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        timeout_seconds: float,
+        proxy_url: str | None,
+    ) -> None:
+        # Egress is explicit: ambient proxy variables must not redirect it.
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={"User-Agent": _USER_AGENT},
             timeout=timeout_seconds,
+            proxy=proxy_url,
+            trust_env=False,
         )
 
     async def close(self) -> None:
@@ -99,4 +108,5 @@ def default() -> BoomlingsClient:
     return BoomlingsClient(
         base_url=settings.BOOMLINGS_URL,
         timeout_seconds=settings.BOOMLINGS_TIMEOUT_SECONDS,
+        proxy_url=settings.BOOMLINGS_PROXY_URL or None,
     )

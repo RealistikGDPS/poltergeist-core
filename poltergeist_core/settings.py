@@ -15,6 +15,8 @@ APP_STORAGE_PATH = os.environ["APP_STORAGE_PATH"]
 
 BOOMLINGS_URL = os.environ["BOOMLINGS_URL"].rstrip("/")
 BOOMLINGS_TIMEOUT_SECONDS = float(os.environ["BOOMLINGS_TIMEOUT_SECONDS"])
+# An HTTP proxy for the official servers; empty means direct egress.
+BOOMLINGS_PROXY_URL = os.environ["BOOMLINGS_PROXY_URL"]
 
 MYSQL_HOST = os.environ["MYSQL_HOST"]
 MYSQL_TCP_PORT = int(os.environ["MYSQL_TCP_PORT"])
