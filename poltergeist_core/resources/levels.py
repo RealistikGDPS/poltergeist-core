@@ -583,8 +583,11 @@ class LevelRepository:
         return (highest or 0) + 1
 
     async def creator_points_of(self, user_id: int) -> int:
+        """Rated 1, featured 2, epic 3, legendary 4, mythic 5: the rating
+        column counts 0 to 3 in that order, so it is the bonus itself."""
+
         points: int = await self._mysql.fetch_val(
-            "SELECT COALESCE(SUM((stars > 0) + (feature_order > 0) + (rating > 0)), 0) "
+            "SELECT COALESCE(SUM((stars > 0) + (feature_order > 0) + rating), 0) "
             "FROM levels WHERE user_id = %(id)s AND deleted_at IS NULL",
             {"id": user_id},
         )
