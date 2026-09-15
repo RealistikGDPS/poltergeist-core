@@ -570,7 +570,8 @@ class LevelRepository:
 
     async def transfer(self, level_id: int, user_id: int) -> None:
         await self._mysql.execute(
-            "UPDATE levels SET user_id = %(user)s WHERE id = %(id)s",
+            "UPDATE levels SET user_id = %(user)s WHERE id = %(id)s "
+            "AND deleted_at IS NULL",
             {"id": level_id, "user": user_id},
         )
 

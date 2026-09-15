@@ -12,6 +12,7 @@ from gdformat.requests import SuggestStarsRequest
 
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Level
+from poltergeist_core.resources import LevelMoved
 from poltergeist_core.resources import LevelRated
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
@@ -198,6 +199,62 @@ async def rate_level(
     )
 
     await ctx.events.publish(_rated(updated, creator, actor_user_id))
+
+    return updated
+
+
+async def move_level(
+    ctx: AbstractContext, *, actor_user_id: int, level_id: int, target_user_id: int
+) -> ModerationError.OnSuccess[Level]:
+    """Reassigns a level to another creator. Creator points are derived from
+    the levels a user holds, so both sides are recomputed here."""
+
+    level = await ctx.levels.find_by_id(level_id)
+
+    if level is None:
+        return ModerationError.NOT_FOUND
+
+    if not await ctx.permissions.has(actor_user_id, Permission.LEVELS_MOVE):
+        return ModerationError.NOT_PERMITTED
+
+    target = await ctx.users.find_by_id(target_user_id)
+
+    if target is None:
+        return ModerationError.NOT_FOUND
+
+    if level.user_id == target.id:
+        return ModerationError.INVALID
+
+    previous = await ctx.users.find_by_id(level.user_id)
+
+    await ctx.levels.transfer(level.id, target.id)
+    await refresh_creator_points(ctx, level.user_id)
+    await refresh_creator_points(ctx, target.id)
+    updated = await ctx.levels.find_by_id(level.id)
+
+    if updated is None:
+        return ModerationError.NOT_FOUND
+
+    await _audit.record(
+        ctx,
+        actor_user_id,
+        "move",
+        ModTarget.LEVEL,
+        level.id,
+        {"from_user_id": level.user_id, "to_user_id": target.id},
+    )
+
+    await ctx.events.publish(
+        LevelMoved(
+            level_id=level.id,
+            level_name=level.name,
+            from_user_id=level.user_id,
+            from_username=None if previous is None else previous.username,
+            to_user_id=target.id,
+            to_username=target.username,
+            actor_user_id=actor_user_id,
+        )
+    )
 
     return updated
 

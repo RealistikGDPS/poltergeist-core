@@ -17,6 +17,7 @@ class Permission(StrEnum):
     LEVELS_UPLOAD = "levels.upload"
     LEVELS_REPORT = "levels.report"
     LEVELS_EDIT_ANY = "levels.edit_any"
+    LEVELS_MOVE = "levels.move"
     LEVELS_DELETE_ANY = "levels.delete_any"
     LEVELS_RATE = "levels.rate"
     LEVELS_FEATURE = "levels.feature"

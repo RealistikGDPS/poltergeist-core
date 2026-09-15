@@ -110,6 +110,20 @@ class LevelDeleted(Event):
     actor_user_id: int
 
 
+class LevelMoved(Event):
+    """`from_username` is missing when the previous owner has been deleted."""
+
+    kind: ClassVar[str] = "levels.moved"
+
+    level_id: int
+    level_name: str
+    from_user_id: int
+    from_username: str | None
+    to_user_id: int
+    to_username: str
+    actor_user_id: int
+
+
 class LevelRated(Event):
     kind: ClassVar[str] = "levels.rated"
 

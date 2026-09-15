@@ -75,6 +75,7 @@ from .events import EventPublisher
 from .events import ImplementsEventPublisher
 from .events import LeaderboardsRebuilt
 from .events import LevelDeleted
+from .events import LevelMoved
 from .events import LevelRated
 from .events import LevelUpdated
 from .events import LevelUploaded

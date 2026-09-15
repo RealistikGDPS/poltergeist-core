@@ -74,6 +74,7 @@ consumer that is offline misses the message.
 | `levels.uploaded` | `level_id`, `level_name`, `user_id`, `username`, `version` |
 | `levels.updated` | same as `levels.uploaded`, for a re-upload of an existing level |
 | `levels.deleted` | `level_id`, `level_name`, `user_id` (the creator), `actor_user_id` |
+| `levels.moved` | `level_id`, `level_name`, `from_user_id`, `from_username` (null when that account is deleted), `to_user_id`, `to_username`, `actor_user_id`; creator points of both users are recomputed |
 | `levels.rated` | `level_id`, `level_name`, `user_id`, `username`, `stars`, `difficulty`, `rating`, `feature_order`, `actor_user_id`; zero stars is an unrate, a demon re-rating changes only `difficulty` |
 | `timely.scheduled` | `timely_id`, `timely_type`, `sequence`, `level_id`, `level_name`, `starts_at`, `ends_at`, `actor_user_id` |
 | `roles.assigned` | `user_id`, `username`, `role_id`, `role_name`, `expires_at`, `actor_user_id` |

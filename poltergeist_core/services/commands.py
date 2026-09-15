@@ -288,25 +288,27 @@ async def _delete(ctx: AbstractContext, session: Session, level_id: int) -> str:
 async def _move(
     ctx: AbstractContext, session: Session, level_id: int, args: Sequence[str]
 ) -> str:
-    level = await _edit_any(ctx, session, level_id)
+    level = await _level(ctx, level_id, ())
 
-    if isinstance(level, str):
-        return level
+    if level is None:
+        return "Use this command on a level."
 
     target = await _user(ctx, args)
 
     if target is None:
         return "Usage: move <user>."
 
-    await ctx.levels.transfer(level.id, target.id)
-    await moderation.refresh_creator_points(ctx, level.user_id)
-    await moderation.refresh_creator_points(ctx, target.id)
-
-    await _audit.record(
-        ctx, session.user.id, "move", ModTarget.LEVEL, level.id, {"user_id": target.id}
+    result = await moderation.move_level(
+        ctx,
+        actor_user_id=session.user.id,
+        level_id=level.id,
+        target_user_id=target.id,
     )
 
-    return f"Moved {level.name} to {target.username}."
+    if is_error(result):
+        return _failed(result)
+
+    return f"Moved {result.name} to {target.username}."
 
 
 def _ban_type(value: str | None) -> BanType | None:
