@@ -58,9 +58,13 @@ async def update(
     if not await ctx.permissions.has(actor_user_id, Permission.ADMIN_SETTINGS):
         return ServerSettingsError.NOT_PERMITTED
 
-    if not _valid_url(settings.download_pc_url) or not _valid_url(
-        settings.download_android_url
-    ):
+    links = (
+        settings.download_pc_url,
+        settings.download_android_url,
+        settings.discord_url,
+    )
+
+    if not all(_valid_url(link) for link in links):
         return ServerSettingsError.INVALID
 
     allowances = (
