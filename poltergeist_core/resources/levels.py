@@ -19,8 +19,9 @@ from poltergeist_core.utilities import clock
 _COLUMNS = (
     "l.id, l.user_id, l.name, l.description, l.version, l.length, "
     "l.official_song_id, l.custom_song_id, l.game_version, l.binary_version, "
-    "l.visibility, l.two_player, l.low_detail_mode, l.original_id, l.copyable, "
-    "l.copy_password, l.object_count, l.coins, l.coins_verified, "
+    "l.visibility, l.two_player, l.low_detail_mode, l.original_id, "
+    "l.official_id, l.copyable, l.copy_password, l.object_count, l.coins, "
+    "l.coins_verified, "
     "l.requested_stars, l.editor_seconds, l.editor_seconds_copies, "
     "l.verification_frames, l.downloads, l.likes, l.difficulty, l.stars, "
     "l.feature_order, l.rating, l.rated_at, l.rated_by_user_id, l.update_locked, "
@@ -56,6 +57,7 @@ class Level(Model):
     two_player: bool
     low_detail_mode: bool
     original_id: int | None
+    official_id: int | None
     copyable: bool
     copy_password: int | None
     object_count: int
@@ -348,6 +350,25 @@ class LevelRepository:
 
         return None if row is None else Level.model_validate(row)
 
+    async def find_by_official_id(self, official_id: int) -> Level | None:
+        row = await self._mysql.fetch_one(
+            f"SELECT {_COLUMNS} FROM levels l WHERE l.official_id = %(id)s "
+            "AND l.deleted_at IS NULL",
+            {"id": official_id},
+        )
+
+        return None if row is None else Level.model_validate(row)
+
+    async def official_id_claimed(self, official_id: int) -> bool:
+        """Deleted reuploads keep their claim; the unique key holds either way."""
+
+        claimed: int = await self._mysql.fetch_val(
+            "SELECT EXISTS(SELECT 1 FROM levels WHERE official_id = %(id)s)",
+            {"id": official_id},
+        )
+
+        return bool(claimed)
+
     async def search(self, search: LevelSearch) -> list[Level]:
         where, values = _where_sql(search)
         order = _order_sql(search, values)
@@ -393,6 +414,7 @@ class LevelRepository:
         two_player: bool,
         low_detail_mode: bool,
         original_id: int | None,
+        official_id: int | None,
         copyable: bool,
         copy_password: int | None,
         object_count: int,
@@ -405,12 +427,13 @@ class LevelRepository:
         result = await self._mysql.execute(
             "INSERT INTO levels (user_id, name, description, version, length, "
             "official_song_id, custom_song_id, game_version, binary_version, "
-            "visibility, two_player, low_detail_mode, original_id, copyable, "
-            "copy_password, object_count, coins, requested_stars, editor_seconds, "
-            "editor_seconds_copies, verification_frames) VALUES (%(user_id)s, "
-            "%(name)s, %(description)s, %(version)s, %(length)s, %(official_song)s, "
-            "%(custom_song)s, %(game_version)s, %(binary_version)s, %(visibility)s, "
-            "%(two_player)s, %(ldm)s, %(original)s, %(copyable)s, %(password)s, "
+            "visibility, two_player, low_detail_mode, original_id, official_id, "
+            "copyable, copy_password, object_count, coins, requested_stars, "
+            "editor_seconds, editor_seconds_copies, verification_frames) VALUES "
+            "(%(user_id)s, %(name)s, %(description)s, %(version)s, %(length)s, "
+            "%(official_song)s, %(custom_song)s, %(game_version)s, "
+            "%(binary_version)s, %(visibility)s, %(two_player)s, %(ldm)s, "
+            "%(original)s, %(official)s, %(copyable)s, %(password)s, "
             "%(objects)s, %(coins)s, %(requested_stars)s, %(editor)s, "
             "%(editor_copies)s, %(frames)s)",
             {
@@ -427,6 +450,7 @@ class LevelRepository:
                 "two_player": two_player,
                 "ldm": low_detail_mode,
                 "original": original_id,
+                "official": official_id,
                 "copyable": copyable,
                 "password": copy_password,
                 "objects": object_count,

@@ -44,13 +44,13 @@ from poltergeist_core.resources import SaveRepository
 from poltergeist_core.resources import SecretRewardRepository
 from poltergeist_core.resources import ServerSettingRepository
 from poltergeist_core.resources import SessionRepository
-from poltergeist_core.resources import SongLookupRepository
 from poltergeist_core.resources import SongRepository
 from poltergeist_core.resources import StarVoteRepository
 from poltergeist_core.resources import StatsHistoryRepository
 from poltergeist_core.resources import StatsRepository
 from poltergeist_core.resources import SuggestionRepository
 from poltergeist_core.resources import TimelyRepository
+from poltergeist_core.resources import UpstreamRepository
 from poltergeist_core.resources import UsernameChangeRepository
 from poltergeist_core.resources import UserQuestRepository
 from poltergeist_core.resources import UserRepository
@@ -194,8 +194,8 @@ class AbstractContext(ABC):
         return SongRepository(self._mysql)
 
     @property
-    def song_lookups(self) -> SongLookupRepository:
-        return SongLookupRepository(self._redis)
+    def upstream(self) -> UpstreamRepository:
+        return UpstreamRepository(self._redis)
 
     @property
     def levels(self) -> LevelRepository:

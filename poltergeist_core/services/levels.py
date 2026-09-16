@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import replace
 from datetime import timedelta
@@ -514,7 +515,11 @@ def replace_downloads(level: Level) -> Level:
     return level.model_copy(update={"downloads": level.downloads + 1})
 
 
-def _copy_password(
+def level_name(raw: str) -> str:
+    return encoding.strip_separators(raw).strip()
+
+
+def copy_password(
     password: str | None,
 ) -> LevelError.OnSuccess[tuple[bool, int | None]]:
     if password is None:
@@ -529,38 +534,69 @@ def _copy_password(
     return True, int(password)
 
 
-async def _validate_upload(
-    request: UploadLevelRequest,
+async def validate_level_content(
+    *,
+    name: str,
+    description: str,
+    extra_string: str,
+    coins: int,
+    requested_stars: int,
+    object_count: int,
+    version: int,
+    level_string: str,
 ) -> LevelError.OnSuccess[None]:
-    name = encoding.strip_separators(request.name).strip()
-
     if not name or len(name) > _NAME_MAX:
         return LevelError.INVALID
 
-    if len(request.description) > _DESCRIPTION_MAX:
+    if len(description) > _DESCRIPTION_MAX:
         return LevelError.INVALID
 
-    if len(request.extra_string) > _EXTRA_STRING_MAX:
+    if len(extra_string) > _EXTRA_STRING_MAX:
         return LevelError.INVALID
 
-    if not 0 <= request.coins <= _COINS_MAX:
+    if not 0 <= coins <= _COINS_MAX:
         return LevelError.INVALID
 
-    if request.requested_stars < 0 or request.objects < 0 or request.version < 0:
+    if requested_stars < 0 or object_count < 0 or version < 0:
         return LevelError.INVALID
 
-    if len(request.level_string) > settings.APP_LEVEL_MAX_BYTES:
+    if len(level_string) > settings.APP_LEVEL_MAX_BYTES:
         return LevelError.TOO_LARGE
 
     # Decompressing a multi-megabyte level would stall the event loop.
-    decompressed = await asyncio.to_thread(
-        encoding.decompress_level, request.level_string
-    )
+    decompressed = await asyncio.to_thread(encoding.decompress_level, level_string)
 
     if decompressed is None:
         return LevelError.INVALID
 
     return None
+
+
+async def store_level_data(
+    ctx: AbstractContext,
+    level_id: int,
+    *,
+    level_string: str,
+    extra_string: str,
+    song_ids: Sequence[int],
+    sfx_ids: Sequence[int],
+    replay: str,
+) -> None:
+    level_bytes = level_string.encode()
+    await ctx.storage.save(_LEVEL_KEY.format(level_id=level_id), level_bytes)
+
+    if replay:
+        await ctx.storage.save(_REPLAY_KEY.format(level_id=level_id), replay.encode())
+
+    await ctx.level_data.upsert(
+        level_id,
+        size_bytes=len(level_bytes),
+        sha1=hashlib.sha1(level_bytes).digest(),
+        extra_string=extra_string,
+        song_ids=json.dumps(list(song_ids)),
+        sfx_ids=json.dumps(list(sfx_ids)),
+        has_replay=bool(replay),
+    )
 
 
 async def upload(
@@ -580,12 +616,23 @@ async def upload(
     if await ctx.bans.find_active(user_id, BanType.UPLOAD) is not None:
         return LevelError.BANNED
 
-    validation = await _validate_upload(request)
+    name = level_name(request.name)
+
+    validation = await validate_level_content(
+        name=name,
+        description=request.description,
+        extra_string=request.extra_string,
+        coins=request.coins,
+        requested_stars=request.requested_stars,
+        object_count=request.objects,
+        version=request.version,
+        level_string=request.level_string,
+    )
 
     if validation is not None:
         return validation
 
-    password = _copy_password(request.password)
+    password = copy_password(request.password)
 
     if is_error(password):
         return password
@@ -597,8 +644,7 @@ async def upload(
     if not within_limit:
         return LevelError.RATE_LIMITED
 
-    name = encoding.strip_separators(request.name).strip()
-    copyable, copy_password = password
+    copyable, password_number = password
     custom_song_id = request.custom_song_id or None
 
     if custom_song_id is not None:
@@ -634,8 +680,9 @@ async def upload(
             two_player=request.two_player,
             low_detail_mode=request.low_detail_mode,
             original_id=original_id,
+            official_id=None,
             copyable=copyable,
-            copy_password=copy_password,
+            copy_password=password_number,
             object_count=request.objects,
             coins=request.coins,
             requested_stars=min(request.requested_stars, _REQUESTED_STARS_MAX),
@@ -663,7 +710,7 @@ async def upload(
             two_player=request.two_player,
             low_detail_mode=request.low_detail_mode,
             copyable=copyable,
-            copy_password=copy_password,
+            copy_password=password_number,
             object_count=request.objects,
             coins=request.coins,
             requested_stars=min(request.requested_stars, _REQUESTED_STARS_MAX),
@@ -672,22 +719,14 @@ async def upload(
             verification_frames=request.verification_time,
         )
 
-    level_bytes = request.level_string.encode()
-    await ctx.storage.save(_LEVEL_KEY.format(level_id=level_id), level_bytes)
-
-    if request.replay:
-        await ctx.storage.save(
-            _REPLAY_KEY.format(level_id=level_id), request.replay.encode()
-        )
-
-    await ctx.level_data.upsert(
+    await store_level_data(
+        ctx,
         level_id,
-        size_bytes=len(level_bytes),
-        sha1=hashlib.sha1(level_bytes).digest(),
+        level_string=request.level_string,
         extra_string=request.extra_string,
-        song_ids=json.dumps(list(request.song_ids)),
-        sfx_ids=json.dumps(list(request.sfx_ids)),
-        has_replay=bool(request.replay),
+        song_ids=request.song_ids,
+        sfx_ids=request.sfx_ids,
+        replay=request.replay,
     )
 
     event_type = LevelUploaded if existing is None else LevelUpdated

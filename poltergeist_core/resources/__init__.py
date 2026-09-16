@@ -33,13 +33,13 @@ from . import scores
 from . import secret_rewards
 from . import server_settings
 from . import sessions
-from . import song_lookups
 from . import songs
 from . import star_votes
 from . import stats
 from . import stats_history
 from . import suggestions
 from . import timely
+from . import upstream
 from . import username_changes
 from . import users
 from . import web_sessions
@@ -153,7 +153,6 @@ from .secret_rewards import SecretRewardRepository
 from .server_settings import ServerSettingRepository
 from .server_settings import ServerSettings
 from .sessions import SessionRepository
-from .song_lookups import SongLookupRepository
 from .songs import CUSTOM_ID_END
 from .songs import CUSTOM_ID_START
 from .songs import Artist
@@ -175,6 +174,7 @@ from .suggestions import SuggestionRepository
 from .timely import TimelyLevel
 from .timely import TimelyRepository
 from .timely import TimelyReward
+from .upstream import UpstreamRepository
 from .username_changes import UsernameChange
 from .username_changes import UsernameChangeRepository
 from .users import User

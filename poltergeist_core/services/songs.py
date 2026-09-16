@@ -62,22 +62,22 @@ async def _fetch_upstream(ctx: AbstractContext, song_id: int) -> Song | None:
     if CUSTOM_ID_START <= song_id < CUSTOM_ID_END:
         return None
 
-    if await ctx.song_lookups.is_missing(song_id):
+    if await ctx.upstream.is_song_missing(song_id):
         return None
 
     # The official servers rate limit per egress address, which a proxy shares
     # with strangers; an outage or a 429 pauses every lookup for a minute.
-    if await ctx.song_lookups.is_suspended():
+    if await ctx.upstream.is_suspended():
         return None
 
     upstream = await ctx.boomlings.fetch_song(song_id)
 
     if isinstance(upstream, BoomlingsError):
         if upstream in (BoomlingsError.NOT_FOUND, BoomlingsError.NOT_ALLOWED):
-            await ctx.song_lookups.mark_missing(song_id)
+            await ctx.upstream.mark_song_missing(song_id)
 
         if upstream is BoomlingsError.UNAVAILABLE:
-            await ctx.song_lookups.suspend()
+            await ctx.upstream.suspend()
 
         return None
 

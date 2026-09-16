@@ -15,6 +15,7 @@ class Permission(StrEnum):
     string, including wildcards such as `levels.*`."""
 
     LEVELS_UPLOAD = "levels.upload"
+    LEVELS_REUPLOAD = "levels.reupload"
     LEVELS_REPORT = "levels.report"
     LEVELS_EDIT_ANY = "levels.edit_any"
     LEVELS_MOVE = "levels.move"

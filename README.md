@@ -73,6 +73,8 @@ consumer that is offline misses the message.
 | `users.flagged` | `flag_id`, `user_id`, `username`, `flag_kind` (`stats_ceiling`, `score_implausible`, `alt_account`), `summary` (one line, never an address); the write that raised the flag went through |
 | `levels.uploaded` | `level_id`, `level_name`, `user_id`, `username`, `version` |
 | `levels.updated` | same as `levels.uploaded`, for a re-upload of an existing level |
+
+`levels.uploaded` is also emitted when the website's level reupload tool copies an official level; `user_id` is then the reupload bot.
 | `levels.deleted` | `level_id`, `level_name`, `user_id` (the creator), `actor_user_id` |
 | `levels.moved` | `level_id`, `level_name`, `from_user_id`, `from_username` (null when that account is deleted), `to_user_id`, `to_username`, `actor_user_id`; creator points of both users are recomputed |
 | `levels.rated` | `level_id`, `level_name`, `user_id`, `username`, `stars`, `difficulty`, `rating`, `feature_order`, `actor_user_id`; zero stars is an unrate, a demon re-rating changes only `difficulty` |

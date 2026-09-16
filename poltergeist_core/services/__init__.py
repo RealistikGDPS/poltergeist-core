@@ -14,6 +14,7 @@ from . import likes
 from . import lists
 from . import moderation
 from . import packs
+from . import reuploads
 from . import rewards
 from . import roles
 from . import scores

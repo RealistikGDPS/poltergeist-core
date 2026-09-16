@@ -16,6 +16,9 @@ class ServerSettings(Model):
     level_uploads_enabled: bool = True
     song_reupload_enabled: bool = False
     level_reupload_enabled: bool = False
+    # The account reuploaded levels are published under; 0 means none yet.
+    reupload_bot_user_id: int = 0
+    level_reupload_daily_limit: int = 4
     download_pc_url: str = ""
     download_android_url: str = ""
     # What the official main levels award, added to the rated content when

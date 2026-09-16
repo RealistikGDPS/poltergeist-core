@@ -73,6 +73,15 @@ async def update(
     if any(value < 0 for value in allowances):
         return ServerSettingsError.INVALID
 
+    if settings.level_reupload_daily_limit < 1 or settings.reupload_bot_user_id < 0:
+        return ServerSettingsError.INVALID
+
+    if (
+        settings.reupload_bot_user_id
+        and await ctx.users.find_by_id(settings.reupload_bot_user_id) is None
+    ):
+        return ServerSettingsError.INVALID
+
     before = (await ctx.server_settings.load()).model_dump()
 
     changes = {
