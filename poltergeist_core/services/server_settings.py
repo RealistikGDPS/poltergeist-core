@@ -61,6 +61,7 @@ async def update(
     links = (
         settings.download_pc_url,
         settings.download_android_url,
+        settings.download_ios_url,
         settings.discord_url,
     )
 

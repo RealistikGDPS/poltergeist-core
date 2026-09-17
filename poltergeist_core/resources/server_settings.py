@@ -21,6 +21,7 @@ class ServerSettings(Model):
     level_reupload_daily_limit: int = 4
     download_pc_url: str = ""
     download_android_url: str = ""
+    download_ios_url: str = ""
     # The community invite shown on the website; empty hides it.
     discord_url: str = ""
     # What the official main levels award, added to the rated content when
