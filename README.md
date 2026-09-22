@@ -83,6 +83,9 @@ consumer that is offline misses the message.
 | `roles.revoked` | `user_id`, `role_id`, `role_name`, `actor_user_id` |
 | `server_settings.updated` | `changes` (setting name to new value, changed keys only), `actor_user_id` |
 | `leaderboards.rebuilt` | `users` (accounts ranked) |
+| `demon_list.placed` | `placement_id`, `level_id`, `level_name`, `position`, `actor_user_id`; emitted when a level is added to the demon list and when it is moved |
+| `demon_list.record_submitted` | `record_id`, `level_id`, `level_name`, `user_id`, `username`, `percent`, `video_url` (may be empty); awaiting review |
+| `demon_list.record_approved` | `record_id`, `level_id`, `level_name`, `user_id`, `username`, `percent`, `points` (list points at approval), `actor_user_id` |
 | `moderation.action` | `mod_action_id`, `actor_user_id`, `action`, `target_type`, `target_id`, `details`; one per `mod_actions` row, so every administrative action reaches the bus even without a typed event |
 
 The classes live in `poltergeist_core/resources/events.py`; a service

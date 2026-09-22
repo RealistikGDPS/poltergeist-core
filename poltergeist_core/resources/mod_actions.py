@@ -23,6 +23,8 @@ class ModTarget(StrEnum):
     ROLE = "role"
     SERVER = "server"
     FLAG = "flag"
+    DEMON_LIST_PLACEMENT = "demon_list_placement"
+    DEMON_LIST_RECORD = "demon_list_record"
 
 
 class ModAction(Model):

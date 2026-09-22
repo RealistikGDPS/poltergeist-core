@@ -20,6 +20,7 @@ class BanType(StrEnum):
     UPLOAD = "upload"
     LEADERBOARD = "leaderboard"
     CREATOR = "creator"
+    DEMON_LIST = "demon_list"
 
 
 class UserBan(Model):

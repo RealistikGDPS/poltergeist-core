@@ -327,7 +327,8 @@ async def _ban(ctx: AbstractContext, session: Session, args: Sequence[str]) -> s
 
     if target is None or ban_type is None:
         return (
-            "Usage: ban <user> <account|comment|upload|leaderboard|creator> "
+            "Usage: ban <user> "
+            "<account|comment|upload|leaderboard|creator|demon_list> "
             "[days|perm] [reason]."
         )
 
@@ -365,7 +366,10 @@ async def _unban(ctx: AbstractContext, session: Session, args: Sequence[str]) ->
     ban_type = _ban_type(args[1]) if len(args) > 1 else None
 
     if target is None or ban_type is None:
-        return "Usage: unban <user> <account|comment|upload|leaderboard|creator>."
+        return (
+            "Usage: unban <user> "
+            "<account|comment|upload|leaderboard|creator|demon_list>."
+        )
 
     result = await moderation.unban(
         ctx, actor_user_id=session.user.id, target_user_id=target.id, ban_type=ban_type

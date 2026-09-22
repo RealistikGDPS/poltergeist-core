@@ -16,6 +16,8 @@ from poltergeist_core.resources import CeilingRepository
 from poltergeist_core.resources import ChestRepository
 from poltergeist_core.resources import CommentRepository
 from poltergeist_core.resources import CredentialRepository
+from poltergeist_core.resources import DemonListPlacementRepository
+from poltergeist_core.resources import DemonListRecordRepository
 from poltergeist_core.resources import DeviceRepository
 from poltergeist_core.resources import DownloadMarkRepository
 from poltergeist_core.resources import FlagRepository
@@ -212,6 +214,14 @@ class AbstractContext(ABC):
     @property
     def map_packs(self) -> MapPackRepository:
         return MapPackRepository(self._mysql)
+
+    @property
+    def demon_list_placements(self) -> DemonListPlacementRepository:
+        return DemonListPlacementRepository(self._mysql)
+
+    @property
+    def demon_list_records(self) -> DemonListRecordRepository:
+        return DemonListRecordRepository(self._mysql)
 
     @property
     def gauntlets(self) -> GauntletRepository:

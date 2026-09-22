@@ -6,6 +6,7 @@ from . import auth
 from . import clients
 from . import commands
 from . import comments
+from . import demon_list
 from . import flags
 from . import health
 from . import leaderboards

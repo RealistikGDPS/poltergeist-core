@@ -81,6 +81,12 @@ async def update(
     if settings.level_reupload_daily_limit < 1 or settings.reupload_bot_user_id < 0:
         return ServerSettingsError.INVALID
 
+    if settings.demon_list_daily_submissions < 1 or settings.demon_list_top_points < 1:
+        return ServerSettingsError.INVALID
+
+    if not 1 <= settings.demon_list_decay_percent <= 100:
+        return ServerSettingsError.INVALID
+
     if (
         settings.reupload_bot_user_id
         and await ctx.users.find_by_id(settings.reupload_bot_user_id) is None

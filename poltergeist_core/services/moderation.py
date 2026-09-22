@@ -79,6 +79,8 @@ def _ban_permission(ban_type: BanType) -> Permission:
             return Permission.USERS_BAN_LEADERBOARD
         case BanType.CREATOR:
             return Permission.USERS_BAN_CREATOR
+        case BanType.DEMON_LIST:
+            return Permission.USERS_BAN_DEMON_LIST
 
 
 async def refresh_creator_points(ctx: AbstractContext, user_id: int) -> None:

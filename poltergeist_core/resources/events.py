@@ -184,6 +184,43 @@ class LeaderboardsRebuilt(Event):
     users: int
 
 
+class DemonListPlaced(Event):
+    """A level added to the demon list or moved to a new position."""
+
+    kind: ClassVar[str] = "demon_list.placed"
+
+    placement_id: int
+    level_id: int
+    level_name: str
+    position: int
+    actor_user_id: int
+
+
+class DemonListRecordSubmitted(Event):
+    kind: ClassVar[str] = "demon_list.record_submitted"
+
+    record_id: int
+    level_id: int
+    level_name: str
+    user_id: int
+    username: str
+    percent: int
+    video_url: str
+
+
+class DemonListRecordApproved(Event):
+    kind: ClassVar[str] = "demon_list.record_approved"
+
+    record_id: int
+    level_id: int
+    level_name: str
+    user_id: int
+    username: str
+    percent: int
+    points: int
+    actor_user_id: int
+
+
 class ModerationAction(Event):
     """One per `mod_actions` row, so every administrative action reaches the
     bus even when it has no typed event."""

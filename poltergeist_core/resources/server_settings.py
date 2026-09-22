@@ -32,6 +32,12 @@ class ServerSettings(Model):
     official_moons: int = 0
     official_demons: int = 3
     official_secret_coins: int = 66
+    demon_list_submissions_enabled: bool = True
+    demon_list_daily_submissions: int = 10
+    # List points: the top placement is worth `top_points`, each one below it
+    # `decay_percent` percent of the one above.
+    demon_list_top_points: int = 250
+    demon_list_decay_percent: int = 90
 
 
 class ServerSettingRepository:

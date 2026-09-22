@@ -6,6 +6,7 @@ from . import ceilings
 from . import chests
 from . import comments
 from . import credentials
+from . import demon_list
 from . import devices
 from . import download_marks
 from . import events
@@ -66,9 +67,18 @@ from .comments import Comment
 from .comments import CommentRepository
 from .credentials import CredentialRepository
 from .credentials import UserCredential
+from .demon_list import DemonListPlacement
+from .demon_list import DemonListPlacementRepository
+from .demon_list import DemonListRecord
+from .demon_list import DemonListRecordRepository
+from .demon_list import RankedRecord
+from .demon_list import RecordStatus
 from .devices import Device
 from .devices import DeviceRepository
 from .download_marks import DownloadMarkRepository
+from .events import DemonListPlaced
+from .events import DemonListRecordApproved
+from .events import DemonListRecordSubmitted
 from .events import Event
 from .events import EventOutbox
 from .events import EventPublisher
