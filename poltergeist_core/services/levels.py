@@ -650,12 +650,14 @@ async def upload(
     if custom_song_id is not None:
         await songs.ensure(ctx, custom_song_id)
 
+    existing = None
+
     if request.level_id > 0:
         existing = await ctx.levels.find_by_id(request.level_id)
 
-        if existing is None or existing.user_id != user_id:
-            return LevelError.NOT_FOUND
-    else:
+    # The client keeps the id of a level it uploaded elsewhere or that has since
+    # been deleted, so an id that is not the uploader's own means a fresh upload.
+    if existing is None or existing.user_id != user_id:
         existing = await ctx.levels.find_by_user_and_name(user_id, name)
 
     original_id = request.original_id or None
