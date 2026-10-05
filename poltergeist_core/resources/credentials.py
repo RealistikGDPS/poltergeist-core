@@ -33,7 +33,7 @@ class CredentialRepository:
         await self._mysql.execute(
             "INSERT INTO user_credentials (user_id, gjp2_bcrypt) "
             "VALUES (%(id)s, %(hash)s) "
-            "ON DUPLICATE KEY UPDATE gjp2_bcrypt = VALUES(gjp2_bcrypt), "
+            "AS incoming ON DUPLICATE KEY UPDATE gjp2_bcrypt = incoming.gjp2_bcrypt, "
             "legacy_password_bcrypt = NULL",
             {"id": user_id, "hash": gjp2_bcrypt},
         )

@@ -50,8 +50,8 @@ class FriendRequestRepository:
         result = await self._mysql.execute(
             "INSERT INTO friend_requests (sender_user_id, recipient_user_id, message, "
             "created_at) VALUES (%(sender)s, %(recipient)s, %(message)s, %(now)s) "
-            "ON DUPLICATE KEY UPDATE message = VALUES(message), "
-            "created_at = VALUES(created_at), read_at = NULL, deleted_at = NULL, "
+            "AS incoming ON DUPLICATE KEY UPDATE message = incoming.message, "
+            "created_at = incoming.created_at, read_at = NULL, deleted_at = NULL, "
             "id = LAST_INSERT_ID(id)",
             {
                 "sender": sender_user_id,

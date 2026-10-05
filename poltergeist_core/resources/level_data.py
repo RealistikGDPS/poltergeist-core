@@ -47,10 +47,11 @@ class LevelDataRepository:
         await self._mysql.execute(
             "INSERT INTO level_data (level_id, size_bytes, sha1, extra_string, "
             "song_ids, sfx_ids, has_replay) VALUES (%(id)s, %(size)s, %(sha1)s, "
-            "%(extra)s, %(songs)s, %(sfx)s, %(replay)s) ON DUPLICATE KEY UPDATE "
-            "size_bytes = VALUES(size_bytes), sha1 = VALUES(sha1), "
-            "extra_string = VALUES(extra_string), song_ids = VALUES(song_ids), "
-            "sfx_ids = VALUES(sfx_ids), has_replay = VALUES(has_replay)",
+            "%(extra)s, %(songs)s, %(sfx)s, %(replay)s) AS incoming "
+            "ON DUPLICATE KEY UPDATE "
+            "size_bytes = incoming.size_bytes, sha1 = incoming.sha1, "
+            "extra_string = incoming.extra_string, song_ids = incoming.song_ids, "
+            "sfx_ids = incoming.sfx_ids, has_replay = incoming.has_replay",
             {
                 "id": level_id,
                 "size": size_bytes,

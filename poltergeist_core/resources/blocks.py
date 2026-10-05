@@ -39,8 +39,8 @@ class BlockRepository:
     async def create(self, user_id: int, blocked_user_id: int) -> None:
         await self._mysql.execute(
             "INSERT INTO user_blocks (user_id, blocked_user_id, created_at) "
-            "VALUES (%(id)s, %(blocked)s, %(now)s) ON DUPLICATE KEY UPDATE "
-            "created_at = VALUES(created_at), deleted_at = NULL",
+            "VALUES (%(id)s, %(blocked)s, %(now)s) AS incoming ON DUPLICATE KEY UPDATE "
+            "created_at = incoming.created_at, deleted_at = NULL",
             {"id": user_id, "blocked": blocked_user_id, "now": clock.now()},
         )
 

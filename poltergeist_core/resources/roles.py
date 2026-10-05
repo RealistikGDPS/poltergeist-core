@@ -139,8 +139,9 @@ class RoleRepository:
         await self._mysql.execute(
             "INSERT INTO user_roles (user_id, role_id, granted_by_user_id, created_at, "
             "expires_at) VALUES (%(user)s, %(role)s, %(by)s, %(now)s, %(expires)s) "
-            "ON DUPLICATE KEY UPDATE granted_by_user_id = VALUES(granted_by_user_id), "
-            "created_at = VALUES(created_at), expires_at = VALUES(expires_at), "
+            "AS incoming ON DUPLICATE KEY UPDATE "
+            "granted_by_user_id = incoming.granted_by_user_id, "
+            "created_at = incoming.created_at, expires_at = incoming.expires_at, "
             "deleted_at = NULL",
             {
                 "user": user_id,

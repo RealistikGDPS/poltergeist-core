@@ -40,11 +40,11 @@ class SaveRepository:
         await self._mysql.execute(
             "INSERT INTO user_saves (user_id, game_version, binary_version, "
             "game_manager_bytes, local_levels_bytes) VALUES (%(id)s, %(game)s, "
-            "%(binary)s, %(manager)s, %(levels)s) ON DUPLICATE KEY UPDATE "
-            "game_version = VALUES(game_version), "
-            "binary_version = VALUES(binary_version), "
-            "game_manager_bytes = VALUES(game_manager_bytes), "
-            "local_levels_bytes = VALUES(local_levels_bytes)",
+            "%(binary)s, %(manager)s, %(levels)s) AS incoming ON DUPLICATE KEY UPDATE "
+            "game_version = incoming.game_version, "
+            "binary_version = incoming.binary_version, "
+            "game_manager_bytes = incoming.game_manager_bytes, "
+            "local_levels_bytes = incoming.local_levels_bytes",
             {
                 "id": user_id,
                 "game": game_version,
