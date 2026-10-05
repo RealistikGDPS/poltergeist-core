@@ -409,16 +409,20 @@ class LevelRepository:
 
         values: dict[str, MySQLValue] = {}
         branches = _visibility_branches(search, values)
-        visibility = f"({' OR '.join(branches)})" if branches else None
-        where = _where_sql(search, values, visibility)
-
-        count: int = await self._mysql.fetch_val(
-            f"SELECT COUNT(*) FROM (SELECT 1 FROM levels l WHERE {where} "
-            f"LIMIT {_COUNT_CAP}) c",
-            values,
+        visibilities: list[str | None] = [
+            "("
+            + " AND ".join([branch, *(f"NOT ({other})" for other in branches[:i])])
+            + ")"
+            for i, branch in enumerate(branches)
+        ] or [None]
+        counts = " UNION ALL ".join(
+            "SELECT COUNT(*) AS total FROM (SELECT 1 FROM levels l WHERE "
+            f"{_where_sql(search, values, visibility)} LIMIT {_COUNT_CAP}) c"
+            for visibility in visibilities
         )
+        rows = await self._mysql.fetch_all(counts, values)
 
-        return count
+        return min(sum(int(row["total"]) for row in rows), _COUNT_CAP)
 
     async def create(
         self,
