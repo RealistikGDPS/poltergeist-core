@@ -6,6 +6,7 @@ from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources.mod_actions import ModAction
+from poltergeist_core.resources.users import UserKind
 from poltergeist_core.utilities import clock
 
 _SNAPSHOT_KEY = "analytics:snapshot"
@@ -196,9 +197,10 @@ class AnalyticsRepository:
             "SUM(l.stars > 0) AS rated, s.creator_points FROM users u "
             "JOIN user_stats s ON s.user_id = u.id "
             "JOIN levels l ON l.user_id = u.id AND l.deleted_at IS NULL "
-            "WHERE u.deleted_at IS NULL GROUP BY u.id, u.username, s.creator_points "
+            "WHERE u.deleted_at IS NULL AND u.kind = %(player)s "
+            "GROUP BY u.id, u.username, s.creator_points "
             "ORDER BY s.creator_points DESC, levels DESC LIMIT %(limit)s",
-            {"limit": limit},
+            {"limit": limit, "player": UserKind.PLAYER.value},
         )
 
         return [CreatorRow.model_validate(row) for row in rows]
