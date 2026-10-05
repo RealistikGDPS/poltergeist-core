@@ -100,10 +100,11 @@ class LoginRepository:
         """Other users seen from an address this user logged in from."""
 
         rows = await self._mysql.fetch_all(
-            "SELECT DISTINCT other.user_id FROM user_logins own "
+            "SELECT DISTINCT other.user_id FROM ("
+            "SELECT DISTINCT ip FROM user_logins "
+            "WHERE user_id = %(id)s AND created_at >= %(since)s) own "
             "JOIN user_logins other ON other.ip = own.ip "
-            "WHERE own.user_id = %(id)s AND other.user_id <> %(id)s "
-            "AND own.created_at >= %(since)s AND other.created_at >= %(since)s",
+            "WHERE other.user_id <> %(id)s AND other.created_at >= %(since)s",
             {"id": user_id, "since": since},
         )
 
