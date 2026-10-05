@@ -11,7 +11,7 @@ class StarVoteRepository:
         await self._mysql.execute(
             "INSERT INTO level_star_votes (level_id, user_id, stars) "
             "VALUES (%(level)s, %(user)s, %(stars)s) "
-            "ON DUPLICATE KEY UPDATE stars = VALUES(stars)",
+            "AS incoming ON DUPLICATE KEY UPDATE stars = incoming.stars",
             {"level": level_id, "user": user_id, "stars": stars},
         )
 

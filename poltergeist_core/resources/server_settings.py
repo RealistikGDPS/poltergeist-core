@@ -67,9 +67,9 @@ class ServerSettingRepository:
         await self._mysql.execute(
             "INSERT INTO server_settings (`key`, value, updated_by_user_id, "
             "updated_at) VALUES (%(key)s, %(value)s, %(by)s, %(now)s) "
-            "ON DUPLICATE KEY UPDATE value = VALUES(value), "
-            "updated_by_user_id = VALUES(updated_by_user_id), "
-            "updated_at = VALUES(updated_at)",
+            "AS incoming ON DUPLICATE KEY UPDATE value = incoming.value, "
+            "updated_by_user_id = incoming.updated_by_user_id, "
+            "updated_at = incoming.updated_at",
             {
                 "key": key,
                 "value": value,

@@ -111,6 +111,6 @@ class SecretRewardRepository:
         await self._mysql.execute(
             "INSERT INTO secret_reward_items (secret_reward_id, item, amount) "
             "VALUES (%(id)s, %(item)s, %(amount)s) "
-            "ON DUPLICATE KEY UPDATE amount = VALUES(amount)",
+            "AS incoming ON DUPLICATE KEY UPDATE amount = incoming.amount",
             {"id": reward_id, "item": int(item), "amount": amount},
         )

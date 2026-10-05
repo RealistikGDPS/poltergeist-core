@@ -94,11 +94,11 @@ class LevelScoreRepository:
             "attempts, clicks, seconds, coins, progress, level_version, submitted_at) "
             "VALUES (%(level)s, %(user)s, %(timely)s, %(percent)s, %(attempts)s, "
             "%(clicks)s, %(seconds)s, %(coins)s, %(progress)s, %(version)s, %(now)s) "
-            "ON DUPLICATE KEY UPDATE percent = VALUES(percent), "
-            "attempts = VALUES(attempts), clicks = VALUES(clicks), "
-            "seconds = VALUES(seconds), coins = VALUES(coins), "
-            "progress = VALUES(progress), level_version = VALUES(level_version), "
-            "submitted_at = VALUES(submitted_at), deleted_at = NULL",
+            "AS incoming ON DUPLICATE KEY UPDATE percent = incoming.percent, "
+            "attempts = incoming.attempts, clicks = incoming.clicks, "
+            "seconds = incoming.seconds, coins = incoming.coins, "
+            "progress = incoming.progress, level_version = incoming.level_version, "
+            "submitted_at = incoming.submitted_at, deleted_at = NULL",
             {
                 "level": level_id,
                 "user": user_id,
@@ -198,11 +198,11 @@ class PlatformerScoreRepository:
             "time_ms, points, attempts, clicks, coins, level_version, submitted_at) "
             "VALUES (%(level)s, %(user)s, %(timely)s, %(time)s, %(points)s, "
             "%(attempts)s, %(clicks)s, %(coins)s, %(version)s, %(now)s) "
-            "ON DUPLICATE KEY UPDATE time_ms = VALUES(time_ms), "
-            "points = VALUES(points), attempts = VALUES(attempts), "
-            "clicks = VALUES(clicks), coins = VALUES(coins), "
-            "level_version = VALUES(level_version), "
-            "submitted_at = VALUES(submitted_at), deleted_at = NULL",
+            "AS incoming ON DUPLICATE KEY UPDATE time_ms = incoming.time_ms, "
+            "points = incoming.points, attempts = incoming.attempts, "
+            "clicks = incoming.clicks, coins = incoming.coins, "
+            "level_version = incoming.level_version, "
+            "submitted_at = incoming.submitted_at, deleted_at = NULL",
             {
                 "level": level_id,
                 "user": user_id,

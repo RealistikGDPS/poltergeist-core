@@ -91,8 +91,8 @@ class ArtistRepository:
         await self._mysql.execute(
             "INSERT INTO artists (id, name, youtube_channel, scouted) "
             "VALUES (%(id)s, %(name)s, %(youtube)s, %(scouted)s) "
-            "ON DUPLICATE KEY UPDATE name = VALUES(name), "
-            "youtube_channel = VALUES(youtube_channel), scouted = VALUES(scouted)",
+            "AS incoming ON DUPLICATE KEY UPDATE name = incoming.name, "
+            "youtube_channel = incoming.youtube_channel, scouted = incoming.scouted",
             {
                 "id": artist_id,
                 "name": name,
@@ -207,12 +207,12 @@ class SongRepository:
             "priority, nong, is_new, new_badge, soundtrack_url) VALUES (%(id)s, "
             "%(name)s, %(artist)s, %(size)s, %(url)s, %(source)s, %(video)s, "
             "%(priority)s, %(nong)s, %(is_new)s, %(badge)s, %(soundtrack)s) "
-            "ON DUPLICATE KEY UPDATE name = VALUES(name), artist_id = "
-            "VALUES(artist_id), "
-            "size_bytes = VALUES(size_bytes), url = VALUES(url), "
-            "video_id = VALUES(video_id), priority = VALUES(priority), "
-            "nong = VALUES(nong), is_new = VALUES(is_new), "
-            "new_badge = VALUES(new_badge), soundtrack_url = VALUES(soundtrack_url)",
+            "AS incoming ON DUPLICATE KEY UPDATE name = incoming.name, artist_id = "
+            "incoming.artist_id, "
+            "size_bytes = incoming.size_bytes, url = incoming.url, "
+            "video_id = incoming.video_id, priority = incoming.priority, "
+            "nong = incoming.nong, is_new = incoming.is_new, "
+            "new_badge = incoming.new_badge, soundtrack_url = incoming.soundtrack_url",
             {
                 "id": song_id,
                 "name": name,

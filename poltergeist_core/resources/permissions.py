@@ -162,9 +162,10 @@ class PermissionRepository:
         await self._mysql.execute(
             "INSERT INTO user_permissions (user_id, permission, effect, "
             "granted_by_user_id, created_at) VALUES (%(user)s, %(permission)s, "
-            "%(effect)s, %(by)s, %(now)s) ON DUPLICATE KEY UPDATE "
-            "effect = VALUES(effect), granted_by_user_id = VALUES(granted_by_user_id), "
-            "created_at = VALUES(created_at), deleted_at = NULL",
+            "%(effect)s, %(by)s, %(now)s) AS incoming ON DUPLICATE KEY UPDATE "
+            "effect = incoming.effect, "
+            "granted_by_user_id = incoming.granted_by_user_id, "
+            "created_at = incoming.created_at, deleted_at = NULL",
             {
                 "user": user_id,
                 "permission": permission,

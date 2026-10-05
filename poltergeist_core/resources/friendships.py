@@ -70,8 +70,9 @@ class FriendshipRepository:
         await self._mysql.execute(
             "INSERT INTO friendships (user_id, friend_user_id, created_at, seen_at) "
             "VALUES (%(accepter)s, %(sender)s, %(now)s, %(now)s), "
-            "(%(sender)s, %(accepter)s, %(now)s, NULL) ON DUPLICATE KEY UPDATE "
-            "created_at = VALUES(created_at), seen_at = VALUES(seen_at), "
+            "(%(sender)s, %(accepter)s, %(now)s, NULL) AS incoming "
+            "ON DUPLICATE KEY UPDATE "
+            "created_at = incoming.created_at, seen_at = incoming.seen_at, "
             "deleted_at = NULL",
             {"accepter": accepter_user_id, "sender": sender_user_id, "now": now},
         )

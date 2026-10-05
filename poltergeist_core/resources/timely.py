@@ -134,7 +134,7 @@ class TimelyRepository:
         await self._mysql.execute(
             "INSERT INTO timely_level_rewards (timely_level_id, item, amount) "
             "VALUES (%(id)s, %(item)s, %(amount)s) "
-            "ON DUPLICATE KEY UPDATE amount = VALUES(amount)",
+            "AS incoming ON DUPLICATE KEY UPDATE amount = incoming.amount",
             {"id": timely_id, "item": int(item), "amount": amount},
         )
 
