@@ -365,10 +365,11 @@ async def update_stats(
     await ctx.stats.update(user_id, update)
     after = await ctx.stats.find_by_user_id(user_id)
 
+    await ctx.users.touch_last_seen(user_id)
+
     if before is not None and after is not None:
         await anticheat.note_stats(ctx, session.user, before, after)
 
-    await ctx.users.touch_last_seen(user_id)
     await sync_leaderboards(ctx, user_id)
 
     return user_id
