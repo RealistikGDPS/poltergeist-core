@@ -256,10 +256,13 @@ async def login(
     if await ctx.bans.find_active(user.id, BanType.ACCOUNT) is not None:
         return AuthError.ACCOUNT_BANNED
 
+    # The user row is locked first: the inserts below take shared locks on it
+    # through their foreign keys, and two logins of one account that each held
+    # one while asking for the exclusive lock would deadlock.
+    await ctx.users.touch_last_seen(user.id)
     await anticheat.note_login(
         ctx, user, request.client, ip=ip, source=LoginSource.GAME
     )
-    await ctx.users.touch_last_seen(user.id)
     logger.info("User logged in.", extra={"user_id": user.id})
 
     return LoginResult(account_id=user.id, user_id=user.id)
@@ -415,8 +418,8 @@ async def web_login(
         await ctx.credentials.upsert(user.id, hashed)
         logger.info("Legacy password migrated.", extra={"user_id": user.id})
 
-    await anticheat.note_login(ctx, user, Client(), ip=ip, source=LoginSource.WEB)
     await ctx.users.touch_last_seen(user.id)
+    await anticheat.note_login(ctx, user, Client(), ip=ip, source=LoginSource.WEB)
     token = await ctx.web_sessions.create(user.id, seconds=WEB_SESSION_SECONDS)
     logger.info("User logged in through the web.", extra={"user_id": user.id})
 
