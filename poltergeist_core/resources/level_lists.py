@@ -82,28 +82,40 @@ def _order_sql(order: ListOrder) -> str:
             return "l.updated_at DESC, l.id DESC"
 
 
-def _where_sql(search: ListSearch) -> tuple[str, dict[str, MySQLValue]]:
-    values: dict[str, MySQLValue] = {}
+def _visibility_branches(
+    search: ListSearch, values: dict[str, MySQLValue]
+) -> list[str]:
+    if search.include_all_visibilities:
+        return []
+
+    branches = [f"l.visibility = {int(Visibility.PUBLIC)}"]
+
+    if search.include_unlisted:
+        branches.append(f"l.visibility = {int(Visibility.UNLISTED)}")
+
+    if search.friend_ids:
+        sql, friends = placeholders(list(search.friend_ids), "friend")
+        values.update(friends)
+        branches.append(
+            f"(l.visibility = {int(Visibility.FRIENDS)} AND l.user_id IN ({sql}))"
+        )
+
+    if search.viewer_user_id is not None:
+        values["viewer"] = search.viewer_user_id
+        branches.append("l.user_id = %(viewer)s")
+
+    return branches
+
+
+def _where_sql(
+    search: ListSearch,
+    values: dict[str, MySQLValue],
+    visibility: str | None,
+) -> str:
     clauses = ["l.deleted_at IS NULL"]
 
-    if not search.include_all_visibilities:
-        parts = [f"l.visibility = {int(Visibility.PUBLIC)}"]
-
-        if search.include_unlisted:
-            parts.append(f"l.visibility = {int(Visibility.UNLISTED)}")
-
-        if search.friend_ids:
-            sql, friends = placeholders(list(search.friend_ids), "friend")
-            values.update(friends)
-            parts.append(
-                f"(l.visibility = {int(Visibility.FRIENDS)} AND l.user_id IN ({sql}))"
-            )
-
-        if search.viewer_user_id is not None:
-            values["viewer"] = search.viewer_user_id
-            parts.append("l.user_id = %(viewer)s")
-
-        clauses.append("(" + " OR ".join(parts) + ")")
+    if visibility is not None:
+        clauses.append(visibility)
 
     if search.list_ids is not None:
         if not search.list_ids:
@@ -137,7 +149,7 @@ def _where_sql(search: ListSearch) -> tuple[str, dict[str, MySQLValue]]:
         values["uploaded_after"] = search.uploaded_after
         clauses.append("l.uploaded_at >= %(uploaded_after)s")
 
-    return " AND ".join(clauses), values
+    return " AND ".join(clauses)
 
 
 class LevelListRepository:
@@ -165,22 +177,42 @@ class LevelListRepository:
         return None if row is None else LevelList.model_validate(row)
 
     async def search(self, search: ListSearch) -> list[LevelList]:
-        where, values = _where_sql(search)
+        values: dict[str, MySQLValue] = {}
+        order = _order_sql(search.order)
+        page_offset = offset(search.page, search.size)
+        wheres = [
+            _where_sql(search, values, branch)
+            for branch in _visibility_branches(search, values)
+        ] or [_where_sql(search, values, None)]
+
+        if len(wheres) == 1:
+            sql = (
+                f"SELECT {_COLUMNS} FROM level_lists l WHERE {wheres[0]} "
+                f"ORDER BY {order} LIMIT %(limit)s OFFSET %(offset)s"
+            )
+        else:
+            ids = " UNION ".join(
+                f"(SELECT l.id FROM level_lists l WHERE {where} ORDER BY {order} "
+                f"LIMIT {page_offset + search.size})"
+                for where in wheres
+            )
+            sql = (
+                f"SELECT {_COLUMNS} FROM ({ids}) page "
+                f"JOIN level_lists l ON l.id = page.id "
+                f"ORDER BY {order} LIMIT %(limit)s OFFSET %(offset)s"
+            )
 
         rows = await self._mysql.fetch_all(
-            f"SELECT {_COLUMNS} FROM level_lists l WHERE {where} "
-            f"ORDER BY {_order_sql(search.order)} LIMIT %(limit)s OFFSET %(offset)s",
-            {
-                **values,
-                "limit": search.size,
-                "offset": offset(search.page, search.size),
-            },
+            sql, {**values, "limit": search.size, "offset": page_offset}
         )
 
         return [LevelList.model_validate(row) for row in rows]
 
     async def count(self, search: ListSearch) -> int:
-        where, values = _where_sql(search)
+        values: dict[str, MySQLValue] = {}
+        branches = _visibility_branches(search, values)
+        visibility = f"({' OR '.join(branches)})" if branches else None
+        where = _where_sql(search, values, visibility)
 
         count: int = await self._mysql.fetch_val(
             f"SELECT COUNT(*) FROM (SELECT 1 FROM level_lists l WHERE {where} "
