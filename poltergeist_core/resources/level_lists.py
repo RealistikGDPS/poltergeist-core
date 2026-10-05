@@ -8,7 +8,10 @@ from gdformat.enums import Visibility
 from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.adapters.mysql import MySQLValue
 from poltergeist_core.resources._common import Model
+from poltergeist_core.resources._common import capped_count_sql
+from poltergeist_core.resources._common import disjoint
 from poltergeist_core.resources._common import offset
+from poltergeist_core.resources._common import page_sql
 from poltergeist_core.resources._common import placeholders
 from poltergeist_core.utilities import clock
 
@@ -184,45 +187,22 @@ class LevelListRepository:
             _where_sql(search, values, branch)
             for branch in _visibility_branches(search, values)
         ] or [_where_sql(search, values, None)]
-
-        if len(wheres) == 1:
-            sql = (
-                f"SELECT {_COLUMNS} FROM level_lists l WHERE {wheres[0]} "
-                f"ORDER BY {order} LIMIT %(limit)s OFFSET %(offset)s"
-            )
-        else:
-            ids = " UNION ".join(
-                f"(SELECT l.id FROM level_lists l WHERE {where} ORDER BY {order} "
-                f"LIMIT {page_offset + search.size})"
-                for where in wheres
-            )
-            sql = (
-                f"SELECT {_COLUMNS} FROM ({ids}) page "
-                f"JOIN level_lists l ON l.id = page.id "
-                f"ORDER BY {order} LIMIT %(limit)s OFFSET %(offset)s"
-            )
-
         rows = await self._mysql.fetch_all(
-            sql, {**values, "limit": search.size, "offset": page_offset}
+            page_sql("level_lists", _COLUMNS, wheres, order, page_offset + search.size),
+            {**values, "limit": search.size, "offset": page_offset},
         )
 
         return [LevelList.model_validate(row) for row in rows]
 
     async def count(self, search: ListSearch) -> int:
         values: dict[str, MySQLValue] = {}
-        branches = _visibility_branches(search, values)
-        visibilities: list[str | None] = [
-            "("
-            + " AND ".join([branch, *(f"NOT ({other})" for other in branches[:i])])
-            + ")"
-            for i, branch in enumerate(branches)
-        ] or [None]
-        counts = " UNION ALL ".join(
-            "SELECT COUNT(*) AS total FROM (SELECT 1 FROM level_lists l WHERE "
-            f"{_where_sql(search, values, visibility)} LIMIT {_COUNT_CAP}) c"
-            for visibility in visibilities
+        wheres = [
+            _where_sql(search, values, branch)
+            for branch in disjoint(_visibility_branches(search, values))
+        ] or [_where_sql(search, values, None)]
+        rows = await self._mysql.fetch_all(
+            capped_count_sql("level_lists", wheres, _COUNT_CAP), values
         )
-        rows = await self._mysql.fetch_all(counts, values)
 
         return min(sum(int(row["total"]) for row in rows), _COUNT_CAP)
 
