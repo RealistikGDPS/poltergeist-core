@@ -67,6 +67,26 @@ class BanRepository:
 
         return [UserBan.model_validate(row) for row in rows]
 
+    async def list_active_for_users(
+        self, user_ids: list[int]
+    ) -> dict[int, list[UserBan]]:
+        if not user_ids:
+            return {}
+
+        sql, values = placeholders(user_ids, "id")
+        rows = await self._mysql.fetch_all(
+            f"SELECT {_COLUMNS} FROM user_bans WHERE user_id IN ({sql}) "
+            f"AND {_ACTIVE} ORDER BY created_at DESC",
+            {**values, "now": clock.now()},
+        )
+        bans: dict[int, list[UserBan]] = {}
+
+        for row in rows:
+            ban = UserBan.model_validate(row)
+            bans.setdefault(ban.user_id, []).append(ban)
+
+        return bans
+
     async def list_all_active(self, page: int, size: int) -> list[UserBan]:
         rows = await self._mysql.fetch_all(
             f"SELECT {_COLUMNS} FROM user_bans WHERE {_ACTIVE} "

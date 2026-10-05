@@ -314,11 +314,11 @@ wheels = [
 
 [[package]]
 name = "gdformat"
-version = "0.2.3"
+version = "0.2.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/38/62/6209c56074143150c0d3c003cc160c230540479b58537e75feef06e42e51/gdformat-0.2.3.tar.gz", hash = "sha256:1c7d3d099926574b6cfbb00bf156fd5471716595ef3b9f27caaef6735d44c004", size = 30274, upload-time = "2026-10-03T16:19:52.069Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/e6/fd651b2d062064068eaed11ddd785268589475fbaccd85c699a3068e0cca/gdformat-0.2.4.tar.gz", hash = "sha256:afc68fa3f6cfe492bbcb22ce3756f95895464728fcf8dcd3ec63553fa975dbbf", size = 30505, upload-time = "2026-10-05T21:53:51.15Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/46/19a5843e1c7f2c40a016dec6c1fe262902649457d897ba3d1c3304ee342c/gdformat-0.2.3-py3-none-any.whl", hash = "sha256:37bee5dcd306fd94469dcc59a0cb418fbb69641c0e2efc4480715b3aae8dadb9", size = 47412, upload-time = "2026-10-03T16:19:50.954Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/4f/69f5143fa22ccf1579cb902720bb66324af95920b1a07e8057371850d858/gdformat-0.2.4-py3-none-any.whl", hash = "sha256:188c7ee6f89d54906e7fb68d58ac1e502fa8289a3745c42e37eb6eaa18a5020b", size = 47650, upload-time = "2026-10-05T21:53:50.221Z" },
 ]
 
 [[package]]
@@ -553,7 +553,7 @@ requires-dist = [
     { name = "asyncmy", specifier = ">=0.2.14" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
-    { name = "gdformat", specifier = ">=0.2.3" },
+    { name = "gdformat", specifier = ">=0.2.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pyyaml", specifier = ">=6.0.3" },
