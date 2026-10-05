@@ -143,7 +143,8 @@ async def _note_alts(ctx: AbstractContext, user: User) -> None:
     others = {
         other.id: other for other in await ctx.users.find_many_by_ids(list(linked))
     }
-    banned = [other_id for other_id in linked if await ctx.bans.list_active(other_id)]
+    bans = await ctx.bans.list_active_for_users(list(linked))
+    banned = [other_id for other_id in linked if other_id in bans]
     names = ", ".join(
         f"{others[other_id].username} ({linked[other_id]})"
         for other_id in new_ids
@@ -304,12 +305,9 @@ async def note_classic_score(
 async def linked_accounts(ctx: AbstractContext, user_id: int) -> list[LinkedAccount]:
     linked = await _linked_user_ids(ctx, user_id)
     others = await ctx.users.find_many_by_ids(list(linked))
+    bans = await ctx.bans.list_active_for_users(list(linked))
 
     return [
-        LinkedAccount(
-            user=other,
-            via=linked[other.id],
-            bans=await ctx.bans.list_active(other.id),
-        )
+        LinkedAccount(user=other, via=linked[other.id], bans=bans.get(other.id, []))
         for other in sorted(others, key=lambda other: other.id)
     ]
