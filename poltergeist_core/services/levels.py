@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import replace
@@ -58,6 +59,8 @@ _UPLOAD_LIMIT = 10
 _UPLOAD_WINDOW = 600
 _TRENDING_WINDOW = timedelta(days=7)
 _MAGIC_MIN_OBJECTS = 10_000
+_INFLATE_CHUNK = 1 << 20
+_INFLATE_RATIO_MAX = 16
 _DEMON_OFFSET = 5
 _LEVEL_KEY = "levels/{level_id}.dat"
 _REPLAY_KEY = "replays/{level_id}.dat"
@@ -534,6 +537,31 @@ def copy_password(
     return True, int(password)
 
 
+def _inflates_within(level_string: str, limit: int) -> bool:
+
+    raw = encoding.decode_base64(level_string)
+
+    if raw is None:
+        return False
+
+    inflater = zlib.decompressobj(15 | 32)
+    pending = raw
+    total = 0
+
+    try:
+        while pending and not inflater.eof:
+            total += len(inflater.decompress(pending, _INFLATE_CHUNK))
+
+            if total > limit:
+                return False
+
+            pending = inflater.unconsumed_tail
+    except zlib.error:
+        return False
+
+    return inflater.eof
+
+
 async def validate_level_content(
     *,
     name: str,
@@ -564,9 +592,9 @@ async def validate_level_content(
         return LevelError.TOO_LARGE
 
     # Decompressing a multi-megabyte level would stall the event loop.
-    decompressed = await asyncio.to_thread(encoding.decompress_level, level_string)
+    limit = settings.APP_LEVEL_MAX_BYTES * _INFLATE_RATIO_MAX
 
-    if decompressed is None:
+    if not await asyncio.to_thread(_inflates_within, level_string, limit):
         return LevelError.INVALID
 
     return None
