@@ -285,7 +285,7 @@ async def _build_search(
                     base,
                     order=LevelOrder.FEATURED,
                     featured=True,
-                    player_creators_only=True,
+                    exclude_creator_ids=await _non_player_ids(ctx),
                 ),
                 request,
             )
@@ -359,7 +359,7 @@ async def _build_search(
                     base,
                     order=LevelOrder.FEATURED,
                     ratings=(Rating.EPIC, Rating.LEGENDARY, Rating.MYTHIC),
-                    player_creators_only=True,
+                    exclude_creator_ids=await _non_player_ids(ctx),
                 ),
                 request,
             )
@@ -875,7 +875,17 @@ async def _public_listing(ctx: AbstractContext, search: LevelSearch) -> LevelLis
     )
 
 
-def _public_search(order: LevelOrder, page: int, size: int) -> LevelSearch:
+async def _non_player_ids(ctx: AbstractContext) -> tuple[int, ...]:
+    """The accounts whose levels stay out of the showcase listings. There are
+    only a handful, so naming them beats joining every candidate level to its
+    creator."""
+
+    return tuple(await ctx.users.list_non_player_ids())
+
+
+async def _public_search(
+    ctx: AbstractContext, order: LevelOrder, page: int, size: int
+) -> LevelSearch:
     """Without a viewer only public levels match, which is what an anonymous
     reader may see."""
 
@@ -883,15 +893,20 @@ def _public_search(order: LevelOrder, page: int, size: int) -> LevelSearch:
         order=order,
         page=max(page, 0),
         size=min(max(size, 1), _PUBLIC_PAGE_MAX),
-        player_creators_only=True,
+        exclude_creator_ids=await _non_player_ids(ctx),
     )
 
 
 async def recent(ctx: AbstractContext, *, page: int, size: int) -> LevelListing:
-    return await _public_listing(ctx, _public_search(LevelOrder.UPLOADED, page, size))
+    return await _public_listing(
+        ctx, await _public_search(ctx, LevelOrder.UPLOADED, page, size)
+    )
 
 
 async def featured(ctx: AbstractContext, *, page: int, size: int) -> LevelListing:
     return await _public_listing(
-        ctx, replace(_public_search(LevelOrder.FEATURED, page, size), featured=True)
+        ctx,
+        replace(
+            await _public_search(ctx, LevelOrder.FEATURED, page, size), featured=True
+        ),
     )

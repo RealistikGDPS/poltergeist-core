@@ -16,7 +16,6 @@ from poltergeist_core.resources._common import disjoint
 from poltergeist_core.resources._common import offset
 from poltergeist_core.resources._common import page_sql
 from poltergeist_core.resources._common import placeholders
-from poltergeist_core.resources.users import UserKind
 from poltergeist_core.utilities import clock
 
 _COLUMNS = (
@@ -116,7 +115,7 @@ class LevelSearch:
     exclude_ids: tuple[int, ...] | None = None
     only_ids: tuple[int, ...] | None = None
     featured: bool = False
-    player_creators_only: bool = False
+    exclude_creator_ids: tuple[int, ...] = ()
     original: bool = False
     two_player: bool = False
     coins: bool = False
@@ -250,12 +249,10 @@ def _where_sql(
     if search.featured:
         clauses.append("l.feature_order > 0")
 
-    if search.player_creators_only:
-        values["player_kind"] = UserKind.PLAYER.value
-        clauses.append(
-            "l.user_id NOT IN (SELECT u.id FROM users u WHERE u.kind <> "
-            "%(player_kind)s)"
-        )
+    if search.exclude_creator_ids:
+        sql, given = placeholders(list(search.exclude_creator_ids), "excluded")
+        values.update(given)
+        clauses.append(f"l.user_id NOT IN ({sql})")
 
     if search.original:
         clauses.append("l.original_id IS NULL")
