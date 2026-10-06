@@ -376,17 +376,21 @@ class LevelRepository:
 
         return bool(claimed)
 
-    async def search(self, search: LevelSearch) -> list[Level]:
+    async def search(self, search: LevelSearch, *, lookahead: int = 0) -> list[Level]:
+        """`lookahead` asks for that many rows past the page, which tells the
+        caller whether another page follows without counting the matches."""
+
         values: dict[str, MySQLValue] = {}
         order = _order_sql(search, values)
         page_offset = offset(search.page, search.size)
+        limit = search.size + lookahead
         wheres = [
             _where_sql(search, values, branch)
             for branch in _visibility_branches(search, values)
         ] or [_where_sql(search, values, None)]
         rows = await self._mysql.fetch_all(
-            page_sql("levels", _COLUMNS, wheres, order, page_offset + search.size),
-            {**values, "limit": search.size, "offset": page_offset},
+            page_sql("levels", _COLUMNS, wheres, order, page_offset + limit),
+            {**values, "limit": limit, "offset": page_offset},
         )
 
         return [Level.model_validate(row) for row in rows]

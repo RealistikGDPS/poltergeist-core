@@ -159,8 +159,10 @@ async def search(
             lists=[], creators=[], page=objects.Page(0, page * _PAGE_SIZE, _PAGE_SIZE)
         )
 
-    lists = await ctx.level_lists.search(built)
-    total = await ctx.level_lists.count(built)
+    # NOTE: One row past the page stands in for a count, as in the level search.
+    found = await ctx.level_lists.search(built, lookahead=1)
+    lists = found[:_PAGE_SIZE]
+    start = page * _PAGE_SIZE
     level_ids = await ctx.level_lists.list_level_ids_many([entry.id for entry in lists])
     creators = await ctx.users.find_many_by_ids(
         list({entry.user_id for entry in lists})
@@ -174,7 +176,7 @@ async def search(
             if entry.user_id in by_id
         ],
         creators=[_wire.user_ref(creator) for creator in creators],
-        page=objects.Page(total, page * _PAGE_SIZE, _PAGE_SIZE),
+        page=objects.Page(start + len(found), start, _PAGE_SIZE),
     )
 
 

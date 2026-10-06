@@ -421,8 +421,12 @@ async def search(
             page=objects.Page(0, page * _PAGE_SIZE, _PAGE_SIZE),
         )
 
-    levels = await ctx.levels.search(built)
-    total = await ctx.levels.count(built)
+    # NOTE: The total only has to tell the client whether a next page exists.
+    # Counting every match costs a scan of the listing whenever the filters
+    # have no index, so one row past the page stands in for the count.
+    found = await ctx.levels.search(built, lookahead=1)
+    levels = found[: built.size]
+    start = page * built.size
     creators = await ctx.users.find_many_by_ids(
         list({level.user_id for level in levels})
     )
@@ -438,7 +442,7 @@ async def search(
         ],
         creators=[_wire.user_ref(creator) for creator in creators],
         songs=song_objects,
-        page=objects.Page(total, built.page * built.size, built.size),
+        page=objects.Page(start + len(found), start, built.size),
     )
 
 
