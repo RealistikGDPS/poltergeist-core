@@ -229,23 +229,28 @@ class SongRepository:
             },
         )
 
-    async def create_custom(
-        self,
-        *,
-        name: str,
-        artist_id: int,
-        size_bytes: int,
-        url: str,
-        uploaded_by_user_id: int | None,
-    ) -> int:
-        """Allocates the next id in the custom range under the caller's
-        transaction; the locking read serialises concurrent creators."""
+    async def next_custom_id(self) -> int:
+        """The next free id in the custom range. The locking read holds it for
+        the caller's transaction, so concurrent creators are serialised."""
 
         song_id: int = await self._mysql.fetch_val(
             "SELECT COALESCE(MAX(id), %(start)s - 1) + 1 FROM songs "
             "WHERE id >= %(start)s AND id < %(end)s FOR UPDATE",
             {"start": CUSTOM_ID_START, "end": CUSTOM_ID_END},
         )
+
+        return song_id
+
+    async def create_custom(
+        self,
+        song_id: int,
+        *,
+        name: str,
+        artist_id: int,
+        size_bytes: int,
+        url: str,
+        uploaded_by_user_id: int | None,
+    ) -> None:
         await self._mysql.execute(
             "INSERT INTO songs (id, name, artist_id, size_bytes, url, source, "
             "uploaded_by_user_id) VALUES (%(id)s, %(name)s, %(artist)s, %(size)s, "
@@ -260,8 +265,6 @@ class SongRepository:
                 "by": uploaded_by_user_id,
             },
         )
-
-        return song_id
 
     async def update(
         self,

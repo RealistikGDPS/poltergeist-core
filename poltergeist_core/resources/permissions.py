@@ -58,6 +58,7 @@ class Permission(StrEnum):
     QUESTS_VIEW = "quests.view"
     SAVES_BACKUP = "saves.backup"
     SONGS_REQUEST = "songs.request"
+    SONGS_UPLOAD = "songs.upload"
     SONGS_MANAGE = "songs.manage"
     TIMELY_SCHEDULE = "timely.schedule"
     PACKS_MANAGE = "packs.manage"

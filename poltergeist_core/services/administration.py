@@ -32,8 +32,6 @@ logger = logging.get_logger(__name__)
 _USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9 _-]{3,20}$")
 _ROLE_NAME_PATTERN = re.compile(r"^[a-z0-9_]{2,32}$")
 _REWARD_KEY_PATTERN = re.compile(r"^[a-z0-9_-]{2,64}$")
-_SONG_NAME_LENGTH = 128
-_ARTIST_NAME_LENGTH = 64
 _SONG_URL_LENGTH = 512
 
 
@@ -367,8 +365,8 @@ def _validate_song_fields(
         return AdministrationError.INVALID
 
     if (
-        len(name) > _SONG_NAME_LENGTH
-        or len(artist_name) > _ARTIST_NAME_LENGTH
+        len(name) > songs.NAME_LENGTH
+        or len(artist_name) > songs.ARTIST_NAME_LENGTH
         or len(url) > _SONG_URL_LENGTH
     ):
         return AdministrationError.INVALID

@@ -81,6 +81,9 @@ async def update(
     if settings.level_reupload_daily_limit < 1 or settings.reupload_bot_user_id < 0:
         return ServerSettingsError.INVALID
 
+    if settings.song_upload_daily_limit < 1:
+        return ServerSettingsError.INVALID
+
     if settings.demon_list_daily_submissions < 1 or settings.demon_list_top_points < 1:
         return ServerSettingsError.INVALID
 

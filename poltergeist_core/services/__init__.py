@@ -21,6 +21,7 @@ from . import roles
 from . import scores
 from . import server_settings
 from . import socials
+from . import song_uploads
 from . import songs
 from . import timely
 from . import users
