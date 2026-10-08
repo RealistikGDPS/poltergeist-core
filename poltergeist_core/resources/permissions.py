@@ -44,6 +44,7 @@ class Permission(StrEnum):
     USERS_BAN_LEADERBOARD = "users.ban.leaderboard"
     USERS_BAN_CREATOR = "users.ban.creator"
     USERS_BAN_DEMON_LIST = "users.ban.demon_list"
+    USERS_BAN_SONG_UPLOAD = "users.ban.song_upload"
     USERS_UNBAN = "users.unban"
     USERS_ROLES_ASSIGN = "users.roles.assign"
     USERS_ROLES_REVOKE = "users.roles.revoke"

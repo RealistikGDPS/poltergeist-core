@@ -75,7 +75,7 @@ async def upload_song(
     if not await ctx.permissions.has(actor_user_id, Permission.SONGS_UPLOAD):
         return SongUploadError.NOT_PERMITTED
 
-    if await ctx.bans.find_active(actor_user_id, BanType.UPLOAD) is not None:
+    if await ctx.bans.find_active(actor_user_id, BanType.SONG_UPLOAD) is not None:
         return SongUploadError.BANNED
 
     name = name.strip()
