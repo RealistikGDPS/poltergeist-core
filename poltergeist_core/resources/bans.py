@@ -21,6 +21,7 @@ class BanType(StrEnum):
     LEADERBOARD = "leaderboard"
     CREATOR = "creator"
     DEMON_LIST = "demon_list"
+    SONG_UPLOAD = "song_upload"
 
 
 class UserBan(Model):

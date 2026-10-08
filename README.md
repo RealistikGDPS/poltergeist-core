@@ -73,6 +73,7 @@ consumer that is offline misses the message.
 | `users.flagged` | `flag_id`, `user_id`, `username`, `flag_kind` (`stats_ceiling`, `score_implausible`, `alt_account`), `summary` (one line, never an address); the write that raised the flag went through |
 | `levels.uploaded` | `level_id`, `level_name`, `user_id`, `username`, `version` |
 | `levels.updated` | same as `levels.uploaded`, for a re-upload of an existing level |
+| `songs.uploaded` | `song_id`, `song_name`, `artist_name`, `user_id`, `username`, `size_bytes`; a song file uploaded through the website |
 
 `levels.uploaded` is also emitted when the website's level reupload tool copies an official level; `user_id` is then the reupload bot.
 | `levels.deleted` | `level_id`, `level_name`, `user_id` (the creator), `actor_user_id` |

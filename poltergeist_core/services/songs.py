@@ -20,6 +20,8 @@ logger = logging.get_logger(__name__)
 
 _TOP_ARTISTS_PAGE_SIZE = 20
 _BYTES_PER_MB = 1_048_576
+NAME_LENGTH = 128
+ARTIST_NAME_LENGTH = 64
 
 
 class SongError(ServiceError, StrEnum):
@@ -182,7 +184,10 @@ async def create_custom(
     if not name.strip() or not artist_name.strip() or not url.startswith("http"):
         return SongError.INVALID
 
-    song_id = await ctx.songs.create_custom(
+    song_id = await ctx.songs.next_custom_id()
+
+    await ctx.songs.create_custom(
+        song_id,
         name=name.strip(),
         artist_id=await artist_id_for(ctx, artist_name.strip()),
         size_bytes=size_bytes,

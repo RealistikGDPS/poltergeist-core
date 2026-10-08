@@ -93,6 +93,7 @@ from .events import ModerationAction
 from .events import RoleAssigned
 from .events import RoleRevoked
 from .events import ServerSettingsUpdated
+from .events import SongUploaded
 from .events import TimelyScheduled
 from .events import UserBanned
 from .events import UserFlagged
