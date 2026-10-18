@@ -1,19 +1,19 @@
-from redis.asyncio import Redis
+import beerstream2
 
 from poltergeist_core.utilities import logging
 
 logger = logging.get_logger(__name__)
 
 
-class RedisClient(Redis):
-    """The asynchronous Redis client with responses decoded to `str`."""
-
-    def __init__(self, *, host: str, port: int, database: int) -> None:
-        super().__init__(host=host, port=port, db=database, decode_responses=True)
+class RedisClient(beerstream2.Client):
+    """The event-loop-native Redis client with replies decoded to `str`."""
 
     async def initialise(self) -> None:
-        await self.ping()
+        await self.connect()
         logger.debug("Redis connection verified.")
+
+    async def aclose(self) -> None:
+        await self.close()
 
 
 def default() -> RedisClient:

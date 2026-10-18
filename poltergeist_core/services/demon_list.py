@@ -284,9 +284,7 @@ async def overview(ctx: AbstractContext) -> DemonList:
                 level=level,
                 creator=creators.get(level.user_id),
                 points=placement_points(placement.position, site),
-                record_count=counts.get(placement.id, {}).get(
-                    RecordStatus.APPROVED, 0
-                ),
+                record_count=counts.get(placement.id, {}).get(RecordStatus.APPROVED, 0),
             )
         )
 
@@ -337,9 +335,7 @@ async def standings(ctx: AbstractContext, *, page: int, size: int) -> Standings:
     shown = scores[start : start + size]
     users = {
         user.id: user
-        for user in await ctx.users.find_many_by_ids(
-            [score.user_id for score in shown]
-        )
+        for user in await ctx.users.find_many_by_ids([score.user_id for score in shown])
     }
 
     return Standings(

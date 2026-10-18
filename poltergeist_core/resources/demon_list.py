@@ -299,9 +299,7 @@ class DemonListRecordRepository:
     async def find_approved(
         self, placement_id: int, user_id: int
     ) -> DemonListRecord | None:
-        return await self._find_by_status(
-            placement_id, user_id, RecordStatus.APPROVED
-        )
+        return await self._find_by_status(placement_id, user_id, RecordStatus.APPROVED)
 
     async def list_approved_by_placement(
         self, placement_id: int

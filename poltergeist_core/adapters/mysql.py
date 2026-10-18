@@ -1,15 +1,12 @@
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
 from typing import override
 
-import asyncmy
-from asyncmy.connection import Connection
-from asyncmy.cursors import DictCursor
-from asyncmy.pool import Pool
+import beerstream1
+from beerstream1 import ExecuteResult
 
 from poltergeist_core.utilities import logging
 
@@ -20,12 +17,6 @@ type MySQLValues = Mapping[str, MySQLValue]
 logger = logging.get_logger(__name__)
 
 _INIT_COMMAND = "SET time_zone = '+00:00'"
-
-
-@dataclass(frozen=True, slots=True)
-class ExecuteResult:
-    last_row_id: int
-    affected_rows: int
 
 
 class ImplementsMySQL(ABC):
@@ -52,51 +43,11 @@ class ImplementsMySQL(ABC):
     ) -> ExecuteResult: ...
 
 
-async def _fetch_one(
-    connection: Connection, query: str, values: MySQLValues | None
-) -> MySQLRow | None:
-    async with connection.cursor(DictCursor) as cursor:
-        await cursor.execute(query, values)
-        row: MySQLRow | None = await cursor.fetchone()
-
-        return row
-
-
-async def _fetch_all(
-    connection: Connection, query: str, values: MySQLValues | None
-) -> list[MySQLRow]:
-    async with connection.cursor(DictCursor) as cursor:
-        await cursor.execute(query, values)
-        rows: list[MySQLRow] = list(await cursor.fetchall())
-
-        return rows
-
-
-async def _fetch_val(
-    connection: Connection, query: str, values: MySQLValues | None
-) -> MySQLValue:
-    async with connection.cursor() as cursor:
-        await cursor.execute(query, values)
-        row: tuple[MySQLValue, ...] | None = await cursor.fetchone()
-
-        if row is None:
-            return None
-
-        return row[0]
-
-
-async def _execute(
-    connection: Connection, query: str, values: MySQLValues | None
-) -> ExecuteResult:
-    async with connection.cursor() as cursor:
-        affected: int = await cursor.execute(query, values)
-
-        return ExecuteResult(last_row_id=cursor.lastrowid, affected_rows=affected)
-
-
 class MySQLPool(ImplementsMySQL):
     """A pool of autocommitting connections. Reads go straight through it;
     writes that must be atomic go through `transaction()`."""
+
+    __slots__ = ("_pool",)
 
     def __init__(
         self,
@@ -109,92 +60,70 @@ class MySQLPool(ImplementsMySQL):
         pool_min: int,
         pool_max: int,
     ) -> None:
-        self._host = host
-        self._port = port
-        self._user = user
-        self._password = password
-        self._database = database
-        self._pool_min = pool_min
-        self._pool_max = pool_max
-        self._pool: Pool | None = None
-
-    @property
-    def _connected_pool(self) -> Pool:
-        assert self._pool is not None, "MySQL pool used before connect()."
-
-        return self._pool
-
-    async def connect(self) -> None:
-        self._pool = await asyncmy.create_pool(
-            host=self._host,
-            port=self._port,
-            user=self._user,
-            password=self._password,
-            db=self._database,
-            minsize=self._pool_min,
-            maxsize=self._pool_max,
+        self._pool = beerstream1.Pool(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            min_size=pool_min,
+            max_size=pool_max,
             autocommit=True,
-            charset="utf8mb4",
             init_command=_INIT_COMMAND,
         )
 
+    async def connect(self) -> None:
+        await self._pool.connect()
+
     async def disconnect(self) -> None:
-        pool = self._connected_pool
-        pool.close()
-        await pool.wait_closed()
-        self._pool = None
+        await self._pool.close()
 
     def transaction(self) -> MySQLTransaction:
-        return MySQLTransaction(self._connected_pool)
+        return MySQLTransaction(self._pool)
 
     @override
     async def fetch_one(
         self, query: str, values: MySQLValues | None = None
     ) -> MySQLRow | None:
-        async with self._connected_pool.acquire() as connection:
-            return await _fetch_one(connection, query, values)
+        return await self._pool.fetch_one(query, values)
 
     @override
     async def fetch_all(
         self, query: str, values: MySQLValues | None = None
     ) -> list[MySQLRow]:
-        async with self._connected_pool.acquire() as connection:
-            return await _fetch_all(connection, query, values)
+        return list(await self._pool.fetch_all(query, values))
 
     @override
     async def fetch_val(
         self, query: str, values: MySQLValues | None = None
     ) -> MySQLValue:
-        async with self._connected_pool.acquire() as connection:
-            return await _fetch_val(connection, query, values)
+        return await self._pool.fetch_val(query, values)
 
     @override
     async def execute(
         self, query: str, values: MySQLValues | None = None
     ) -> ExecuteResult:
-        async with self._connected_pool.acquire() as connection:
-            return await _execute(connection, query, values)
+        return await self._pool.execute(query, values)
 
 
 class MySQLTransaction(ImplementsMySQL):
     """A single pooled connection inside `BEGIN`/`COMMIT`; rolls back when the
     block exits with an exception."""
 
-    __slots__ = ("_connection", "_pool")  # Built for every writing request.
+    __slots__ = ("_pool", "_transaction")  # Built for every writing request.
 
-    def __init__(self, pool: Pool) -> None:
+    def __init__(self, pool: beerstream1.Pool) -> None:
         self._pool = pool
-        self._connection: Connection | None = None
+        self._transaction: beerstream1.Transaction | None = None
 
     @property
-    def _active(self) -> Connection:
-        assert self._connection is not None, "Transaction used outside its block."
+    def _active(self) -> beerstream1.Transaction:
+        assert self._transaction is not None, "Transaction used outside its block."
 
-        return self._connection
+        return self._transaction
 
     async def __aenter__(self) -> MySQLTransaction:
-        self._connection = await self._pool.acquire()
-        await self._connection.begin()
+        self._transaction = await self._pool.begin()
 
         return self
 
@@ -204,40 +133,37 @@ class MySQLTransaction(ImplementsMySQL):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        connection = self._active
+        transaction = self._active
+        self._transaction = None
 
-        try:
-            if exc_type is None:
-                await connection.commit()
-            else:
-                await connection.rollback()
-        finally:
-            await self._pool.release(connection)
-            self._connection = None
+        if exc_type is None:
+            await transaction.commit()
+        else:
+            await transaction.rollback()
 
     @override
     async def fetch_one(
         self, query: str, values: MySQLValues | None = None
     ) -> MySQLRow | None:
-        return await _fetch_one(self._active, query, values)
+        return await self._active.fetch_one(query, values)
 
     @override
     async def fetch_all(
         self, query: str, values: MySQLValues | None = None
     ) -> list[MySQLRow]:
-        return await _fetch_all(self._active, query, values)
+        return list(await self._active.fetch_all(query, values))
 
     @override
     async def fetch_val(
         self, query: str, values: MySQLValues | None = None
     ) -> MySQLValue:
-        return await _fetch_val(self._active, query, values)
+        return await self._active.fetch_val(query, values)
 
     @override
     async def execute(
         self, query: str, values: MySQLValues | None = None
     ) -> ExecuteResult:
-        return await _execute(self._active, query, values)
+        return await self._active.execute(query, values)
 
 
 def default() -> MySQLPool:
