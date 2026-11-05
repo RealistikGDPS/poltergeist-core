@@ -102,6 +102,18 @@ class TimelyRepository:
 
         return [TimelyLevel.model_validate(row) for row in rows]
 
+    async def list_started_by_level(self, level_id: int) -> list[TimelyLevel]:
+        """Every run of the level that has begun, newest first. Runs still in
+        the queue stay out: who is next is a surprise."""
+
+        rows = await self._mysql.fetch_all(
+            f"SELECT {_COLUMNS} FROM timely_levels WHERE level_id = %(level)s "
+            "AND deleted_at IS NULL AND starts_at <= %(now)s ORDER BY starts_at DESC",
+            {"level": level_id, "now": clock.now()},
+        )
+
+        return [TimelyLevel.model_validate(row) for row in rows]
+
     async def create(
         self,
         *,

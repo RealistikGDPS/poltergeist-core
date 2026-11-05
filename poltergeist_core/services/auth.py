@@ -55,6 +55,8 @@ _RENAME_COOLDOWN = timedelta(days=30)
 
 # How long a browser stays signed in; every visit pushes the expiry forward.
 WEB_SESSION_SECONDS = 30 * 86_400
+# A player counts as online for this long after their last authenticated request.
+PRESENCE_SECONDS = 300
 
 
 class AuthError(ServiceError, StrEnum):
@@ -238,6 +240,8 @@ async def authenticate(
     # A cached session was already recorded when it was first verified.
     if verified is _Verified.FRESH:
         await anticheat.note_login(ctx, user, client, ip=ip, source=LoginSource.GAME)
+
+    await ctx.presence.touch(user.id, window_seconds=PRESENCE_SECONDS)
 
     return Session(user=user, client=client)
 
@@ -443,7 +447,16 @@ async def web_authenticate(
 
         return AuthError.BANNED
 
+    await ctx.presence.touch(user.id, window_seconds=PRESENCE_SECONDS)
+
     return user
+
+
+async def online_count(ctx: AbstractContext) -> int:
+    """Players who made an authenticated request, in game or on the website,
+    within the presence window."""
+
+    return await ctx.presence.count_since(PRESENCE_SECONDS)
 
 
 async def web_logout(ctx: AbstractContext, token: str) -> None:

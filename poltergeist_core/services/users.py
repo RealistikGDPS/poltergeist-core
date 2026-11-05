@@ -1,5 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 from http import HTTPStatus
 
@@ -28,12 +29,15 @@ from poltergeist_core.services import anticheat
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 from poltergeist_core.services.auth import Session
+from poltergeist_core.utilities import clock
 from poltergeist_core.utilities import logging
 
 logger = logging.get_logger(__name__)
 
 _SEARCH_PAGE_SIZE = 10
 _LEADERBOARD_MAX = 100
+# How far back a public board looks for the ranks it shows movement against.
+_MOVEMENT_DAYS = 7
 _STAT_MAX = 100_000_000
 _ICON_MAX = 10_000
 _COLOUR_MAX = 255
@@ -81,6 +85,16 @@ class LeaderboardEntry:
     rank: int
     user: User
     stats: UserStats
+    previous_rank: int | None = None
+
+    @property
+    def movement(self) -> int | None:
+        """Places climbed since the comparison day; negative is a drop."""
+
+        if self.previous_rank is None:
+            return None
+
+        return self.previous_rank - self.rank
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +103,7 @@ class LeaderboardPage:
     page: int
     size: int
     total: int
+    compared_to: date | None = None
 
 
 async def _friend_state(
@@ -525,8 +540,14 @@ async def public_profile(
 async def public_leaderboard(
     ctx: AbstractContext, kind: LeaderboardKind, *, page: int, size: int
 ) -> LeaderboardPage:
+    """Each day's first view freezes the board, so later views can show how
+    far everyone moved against the oldest frozen board of the past week."""
+
     size = min(max(size, 1), _LEADERBOARD_MAX)
     page = max(page, 0)
+    today = clock.now().date()
+    await ctx.leaderboards.snapshot(kind, today)
+    compared_to = await ctx.leaderboards.oldest_snapshot(kind, today, _MOVEMENT_DAYS)
     user_ids = await ctx.leaderboards.page(kind, page, size)
     total = await ctx.leaderboards.count(kind)
     users = {user.id: user for user in await ctx.users.find_many_by_ids(user_ids)}
@@ -534,12 +555,26 @@ async def public_leaderboard(
         entry.user_id: entry
         for entry in await ctx.stats.find_many_by_user_ids(user_ids)
     }
+    previous = (
+        {}
+        if compared_to is None
+        else await ctx.leaderboards.snapshot_ranks(kind, compared_to, user_ids)
+    )
     entries = [
         LeaderboardEntry(
-            rank=page * size + index + 1, user=users[user_id], stats=stats[user_id]
+            rank=page * size + index + 1,
+            user=users[user_id],
+            stats=stats[user_id],
+            previous_rank=previous.get(user_id),
         )
         for index, user_id in enumerate(user_ids)
         if user_id in users and user_id in stats
     ]
 
-    return LeaderboardPage(entries=entries, page=page, size=size, total=total)
+    return LeaderboardPage(
+        entries=entries,
+        page=page,
+        size=size,
+        total=total,
+        compared_to=compared_to,
+    )

@@ -13,6 +13,7 @@ from poltergeist_core.adapters.mysql import MySQLValue
 from poltergeist_core.resources._common import Model
 from poltergeist_core.resources._common import capped_count_sql
 from poltergeist_core.resources._common import disjoint
+from poltergeist_core.resources._common import like_prefix
 from poltergeist_core.resources._common import offset
 from poltergeist_core.resources._common import page_sql
 from poltergeist_core.resources._common import placeholders
@@ -95,6 +96,22 @@ class RatedLevel(Model):
     stars: int
 
 
+class CreatorTotals(Model):
+    """What a creator's public levels add up to."""
+
+    levels: int
+    downloads: int
+    likes: int
+    rated: int
+    featured: int
+    stars: int
+
+
+class CreatorCount(Model):
+    user_id: int
+    levels: int
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LevelSearch:
     """Every constraint a level listing can carry. `friend_ids` and
@@ -153,8 +170,11 @@ def _order_sql(search: LevelSearch, values: dict[str, MySQLValue]) -> str:
             return f"FIELD(l.id, {sql})"
         case LevelOrder.TIMELY:
             return (
+                # Queued runs stay out of the order as well as the filter, or
+                # a level waiting its turn would jump the list.
                 "(SELECT MAX(t.sequence) FROM timely_levels t WHERE t.level_id = l.id "
-                "AND t.type = %(timely_type)s AND t.deleted_at IS NULL) DESC"
+                "AND t.type = %(timely_type)s AND t.deleted_at IS NULL "
+                "AND t.starts_at <= %(timely_now)s) DESC"
             )
         case LevelOrder.SUGGESTED:
             return (
@@ -220,7 +240,7 @@ def _where_sql(
             clauses.append(f"l.user_id IN ({sql})")
 
     if search.name_prefix is not None:
-        values["name_pattern"] = f"{search.name_prefix}%"
+        values["name_pattern"] = like_prefix(search.name_prefix)
         clauses.append("l.name LIKE %(name_pattern)s")
 
     if search.difficulties is not None:
@@ -633,6 +653,51 @@ class LevelRepository:
         )
 
         return count
+
+    async def creator_totals(self, user_id: int) -> CreatorTotals:
+        row = await self._mysql.fetch_one(
+            # SUM yields DECIMAL in MySQL; the casts keep the row integral.
+            "SELECT COUNT(*) AS levels, "
+            "CAST(COALESCE(SUM(downloads), 0) AS SIGNED) AS downloads, "
+            "CAST(COALESCE(SUM(likes), 0) AS SIGNED) AS likes, "
+            "CAST(COALESCE(SUM(stars > 0), 0) AS SIGNED) AS rated, "
+            "CAST(COALESCE(SUM(feature_order > 0), 0) AS SIGNED) AS featured, "
+            "CAST(COALESCE(SUM(stars), 0) AS SIGNED) AS stars FROM levels "
+            "WHERE user_id = %(id)s AND deleted_at IS NULL "
+            "AND visibility = %(public)s",
+            {"id": user_id, "public": int(Visibility.PUBLIC)},
+        )
+
+        return CreatorTotals.model_validate(row)
+
+    async def top_rated_creators(
+        self, since: datetime, limit: int, *, exclude_creator_ids: tuple[int, ...]
+    ) -> list[CreatorCount]:
+        """Creators by how many of their public levels were rated from `since`
+        on, the most recent rating breaking ties."""
+
+        values: dict[str, MySQLValue] = {
+            "since": since,
+            "limit": limit,
+            "public": int(Visibility.PUBLIC),
+        }
+        excluded = ""
+
+        if exclude_creator_ids:
+            sql, given = placeholders(list(exclude_creator_ids), "excluded")
+            values.update(given)
+            excluded = f"AND user_id NOT IN ({sql}) "
+
+        rows = await self._mysql.fetch_all(
+            "SELECT user_id, COUNT(*) AS levels FROM levels "
+            "WHERE deleted_at IS NULL AND visibility = %(public)s AND stars > 0 "
+            f"AND rated_at >= %(since)s {excluded}"
+            "GROUP BY user_id ORDER BY levels DESC, MAX(rated_at) DESC "
+            "LIMIT %(limit)s",
+            values,
+        )
+
+        return [CreatorCount.model_validate(row) for row in rows]
 
     async def list_rated(self) -> list[RatedLevel]:
         rows = await self._mysql.fetch_all(

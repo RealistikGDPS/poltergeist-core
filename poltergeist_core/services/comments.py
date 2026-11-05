@@ -6,20 +6,25 @@ from gdformat import objects
 from gdformat import requests
 from gdformat.enums import CommentHistoryState
 from gdformat.enums import CommentMode
+from gdformat.enums import ModLevel
 from gdformat.requests import UploadAccountCommentRequest
 from gdformat.requests import UploadCommentRequest
 
 from poltergeist_core import settings
+from poltergeist_core.resources import AccountComment
 from poltergeist_core.resources import BanType
 from poltergeist_core.resources import Comment
 from poltergeist_core.resources import ModTarget
 from poltergeist_core.resources import Permission
+from poltergeist_core.resources import User
+from poltergeist_core.resources import UserStats
 from poltergeist_core.services import _audit
 from poltergeist_core.services import _badges
 from poltergeist_core.services import _wire
 from poltergeist_core.services import commands
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
+from poltergeist_core.services._common import is_error
 from poltergeist_core.services.auth import Session
 from poltergeist_core.utilities import logging
 
@@ -83,6 +88,28 @@ class AccountCommentsPayload:
     page: objects.Page
 
 
+@dataclass(frozen=True, slots=True)
+class CommentPage:
+    """Level comments for pages outside the game, with what is needed to
+    show each author."""
+
+    comments: list[Comment]
+    authors: dict[int, User]
+    stats: dict[int, UserStats]
+    mod_levels: dict[int, ModLevel]
+    page: int
+    size: int
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class PostPage:
+    posts: list[AccountComment]
+    page: int
+    size: int
+    total: int
+
+
 def _page(total: int, page: int, size: int) -> objects.Page:
     return objects.Page(total, page * size, size)
 
@@ -135,13 +162,28 @@ async def upload_level_comment(
     if not requests.verify_comment_chk(request):
         return CommentError.BAD_CHK
 
-    user_id = session.user.id
-    content = request.content.strip()
+    return await post_level_comment(
+        ctx,
+        session.user,
+        request.level_id,
+        request.content,
+        percent=request.percent,
+    )
+
+
+async def post_level_comment(
+    ctx: AbstractContext, author: User, level_id: int, content: str, *, percent: int
+) -> CommentError.OnSuccess[UploadOutcome]:
+    """A negative `level_id` names a level list, as the game does. Text that
+    starts with the command prefix runs as a command for whoever may use them."""
+
+    user_id = author.id
+    content = content.strip()
 
     if not content or len(content) > _LEVEL_COMMENT_MAX:
         return CommentError.INVALID
 
-    if not 0 <= request.percent <= _MAX_PERCENT:
+    if not 0 <= percent <= _MAX_PERCENT:
         return CommentError.INVALID
 
     banned = await _ban(ctx, user_id)
@@ -153,7 +195,7 @@ async def upload_level_comment(
         if not await ctx.permissions.has(user_id, Permission.COMMANDS_USE):
             return CommentError.NOT_PERMITTED
 
-        reply = await commands.execute(ctx, session, content, request.level_id)
+        reply = await commands.execute(ctx, author, content, level_id)
 
         return UploadOutcome(reply=reply)
 
@@ -167,8 +209,8 @@ async def upload_level_comment(
     if not within_limit:
         return CommentError.RATE_LIMITED
 
-    if request.level_id < 0:
-        level_list = await ctx.level_lists.find_by_id(-request.level_id)
+    if level_id < 0:
+        level_list = await ctx.level_lists.find_by_id(-level_id)
 
         if level_list is None:
             return CommentError.NOT_FOUND
@@ -181,7 +223,7 @@ async def upload_level_comment(
             percent=0,
         )
     else:
-        level = await ctx.levels.find_by_id(request.level_id)
+        level = await ctx.levels.find_by_id(level_id)
 
         if level is None:
             return CommentError.NOT_FOUND
@@ -191,7 +233,7 @@ async def upload_level_comment(
             level_id=level.id,
             list_id=None,
             content=content,
-            percent=request.percent,
+            percent=percent,
         )
 
     return UploadOutcome(comment_id=comment_id)
@@ -200,12 +242,25 @@ async def upload_level_comment(
 async def delete_level_comment(
     ctx: AbstractContext, session: Session, comment_id: int
 ) -> CommentError.OnSuccess[None]:
+    removed = await remove_level_comment(ctx, session.user, comment_id)
+
+    if is_error(removed):
+        return removed
+
+    return None
+
+
+async def remove_level_comment(
+    ctx: AbstractContext, actor: User, comment_id: int
+) -> CommentError.OnSuccess[Comment]:
+    """The author, the creator of the level or list, or a moderator may."""
+
     comment = await ctx.comments.find_by_id(comment_id)
 
     if comment is None:
         return CommentError.NOT_FOUND
 
-    user_id = session.user.id
+    user_id = actor.id
     allowed = comment.user_id == user_id
 
     if not allowed and comment.level_id is not None:
@@ -226,7 +281,7 @@ async def delete_level_comment(
     if not allowed:
         await _audit.record(ctx, user_id, "delete", ModTarget.COMMENT, comment.id)
 
-    return None
+    return comment
 
 
 async def list_level_comments(
@@ -291,8 +346,14 @@ async def comment_history(
 async def upload_account_comment(
     ctx: AbstractContext, session: Session, request: UploadAccountCommentRequest
 ) -> CommentError.OnSuccess[UploadOutcome]:
-    user_id = session.user.id
-    content = request.content.strip()
+    return await post_account_comment(ctx, session.user, request.content)
+
+
+async def post_account_comment(
+    ctx: AbstractContext, author: User, content: str
+) -> CommentError.OnSuccess[UploadOutcome]:
+    user_id = author.id
+    content = content.strip()
 
     if not content or len(content) > _ACCOUNT_COMMENT_MAX:
         return CommentError.INVALID
@@ -320,12 +381,18 @@ async def upload_account_comment(
 async def delete_account_comment(
     ctx: AbstractContext, session: Session, comment_id: int
 ) -> CommentError.OnSuccess[None]:
+    return await remove_account_comment(ctx, session.user, comment_id)
+
+
+async def remove_account_comment(
+    ctx: AbstractContext, actor: User, comment_id: int
+) -> CommentError.OnSuccess[None]:
     comment = await ctx.account_comments.find_by_id(comment_id)
 
     if comment is None:
         return CommentError.NOT_FOUND
 
-    user_id = session.user.id
+    user_id = actor.id
 
     if comment.user_id != user_id and not await ctx.permissions.has(
         user_id, Permission.PROFILE_DELETE_ANY
@@ -352,4 +419,48 @@ async def list_account_comments(
     return AccountCommentsPayload(
         comments=[_wire.account_comment(entry) for entry in entries],
         page=_page(total, page, size),
+    )
+
+
+async def level_comment_page(
+    ctx: AbstractContext, level_id: int, *, page: int, size: int, liked: bool
+) -> CommentPage:
+    """The caller decides whether the level may be seen at all."""
+
+    size = _page_size(size)
+    page = max(page, 0)
+    mode = CommentMode.MOST_LIKED if liked else CommentMode.RECENT
+    entries = await ctx.comments.list_by_level(level_id, mode, page, size)
+    author_ids = list({entry.user_id for entry in entries})
+    granted = await ctx.permissions.effective_many(author_ids)
+
+    return CommentPage(
+        comments=entries,
+        authors={
+            user.id: user for user in await ctx.users.find_many_by_ids(author_ids)
+        },
+        stats={
+            entry.user_id: entry
+            for entry in await ctx.stats.find_many_by_user_ids(author_ids)
+        },
+        mod_levels={
+            user_id: _badges.mod_level(grants) for user_id, grants in granted.items()
+        },
+        page=page,
+        size=size,
+        total=await ctx.comments.count_by_level(level_id),
+    )
+
+
+async def post_page(
+    ctx: AbstractContext, user_id: int, *, page: int, size: int
+) -> PostPage:
+    size = _page_size(size)
+    page = max(page, 0)
+
+    return PostPage(
+        posts=await ctx.account_comments.list_by_user(user_id, page, size),
+        page=page,
+        size=size,
+        total=await ctx.account_comments.count_by_user(user_id),
     )

@@ -1,7 +1,12 @@
+from datetime import date
+from datetime import timedelta
 from enum import StrEnum
 
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import offset
+
+# A week of comparisons plus a margin, so last week's board is always there.
+_SNAPSHOT_SECONDS = 9 * 86_400
 
 
 class LeaderboardKind(StrEnum):
@@ -132,3 +137,58 @@ class LeaderboardRepository:
 
     async def clear(self, kind: LeaderboardKind) -> None:
         await self._redis.delete(self._key(kind))
+
+    @staticmethod
+    def _snapshot_key(kind: LeaderboardKind, day: date) -> str:
+        return f"leaderboard:{kind.value}:{day.isoformat()}"
+
+    async def snapshot(self, kind: LeaderboardKind, day: date) -> None:
+        """Freezes the board as it stands under the day's name. Only the first
+        call of a day copies; later ones leave that copy alone."""
+
+        key = self._snapshot_key(kind, day)
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            pipeline.execute_command("COPY", self._key(kind), key)
+            pipeline.expire(key, _SNAPSHOT_SECONDS, nx=True)
+            await pipeline.execute()
+
+    async def oldest_snapshot(
+        self, kind: LeaderboardKind, today: date, days: int
+    ) -> date | None:
+        """The earliest frozen board within `days` before today."""
+
+        candidates = [today - timedelta(days=back) for back in range(days, 0, -1)]
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            for day in candidates:
+                pipeline.exists(self._snapshot_key(kind, day))
+
+            found = await pipeline.execute()
+
+        for day, exists in zip(candidates, found, strict=True):
+            if int(exists):
+                return day
+
+        return None
+
+    async def snapshot_ranks(
+        self, kind: LeaderboardKind, day: date, user_ids: list[int]
+    ) -> dict[int, int]:
+        if not user_ids:
+            return {}
+
+        key = self._snapshot_key(kind, day)
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            for user_id in user_ids:
+                pipeline.zrevrank(key, str(user_id))
+
+            ranks = await pipeline.execute()
+
+        resolved = {
+            user_id: _rank_from(rank)
+            for user_id, rank in zip(user_ids, ranks, strict=True)
+        }
+
+        return {user_id: rank for user_id, rank in resolved.items() if rank is not None}

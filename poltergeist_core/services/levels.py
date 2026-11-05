@@ -516,6 +516,32 @@ async def download(
     )
 
 
+async def visible_to(
+    ctx: AbstractContext, level: Level, viewer_user_id: int | None
+) -> bool:
+    """Whether a page outside the game may show the level. Unlisted levels are
+    reachable by id as they are in game; friends-only ones need the creator or
+    a friend."""
+
+    if level.visibility is not Visibility.FRIENDS:
+        return True
+
+    if viewer_user_id is None:
+        return False
+
+    if viewer_user_id == level.user_id:
+        return True
+
+    return await ctx.friendships.are_friends(viewer_user_id, level.user_id)
+
+
+async def stored_level_string(ctx: AbstractContext, level_id: int) -> bytes | None:
+    """The level string exactly as uploaded: compressed, or plain text for the
+    oldest imported levels."""
+
+    return await ctx.storage.load(_LEVEL_KEY.format(level_id=level_id))
+
+
 def replace_downloads(level: Level) -> Level:
     return level.model_copy(update={"downloads": level.downloads + 1})
 

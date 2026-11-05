@@ -10,6 +10,7 @@ from gdformat.enums import TimelyType
 
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.resources._common import Model
+from poltergeist_core.resources.activity import append_command
 from poltergeist_core.resources.bans import BanType
 from poltergeist_core.resources.flags import FlagKind
 from poltergeist_core.resources.mod_actions import ModTarget
@@ -270,7 +271,12 @@ class EventPublisher(ImplementsEventPublisher):
             "data": event.model_dump(mode="json"),
         }
 
-        await self._redis.publish(event.channel, json.dumps(envelope))
+        payload = json.dumps(envelope)
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            pipeline.publish(event.channel, payload)
+            pipeline.execute_command(*append_command(payload))
+            await pipeline.execute()
 
 
 class EventOutbox(ImplementsEventPublisher):

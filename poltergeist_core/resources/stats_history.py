@@ -116,6 +116,21 @@ class StatsHistoryRepository:
 
         return [StatsHistoryEntry.model_validate(row) for row in rows]
 
+    async def list_since(
+        self, user_id: int, since: datetime, limit: int
+    ) -> list[StatsHistoryEntry]:
+        """Oldest first: the newest `limit` entries recorded from `since` on."""
+
+        rows = await self._mysql.fetch_all(
+            f"SELECT {_COLUMNS} FROM (SELECT {_COLUMNS} FROM user_stats_history "
+            "WHERE user_id = %(id)s AND created_at >= %(since)s "
+            "ORDER BY created_at DESC, id DESC LIMIT %(limit)s) recent "
+            "ORDER BY created_at, id",
+            {"id": user_id, "since": since, "limit": limit},
+        )
+
+        return [StatsHistoryEntry.model_validate(row) for row in rows]
+
     async def count_by_user(self, user_id: int) -> int:
         count: int = await self._mysql.fetch_val(
             "SELECT COUNT(*) FROM user_stats_history WHERE user_id = %(id)s",

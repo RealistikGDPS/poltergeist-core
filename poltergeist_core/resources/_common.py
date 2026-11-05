@@ -34,8 +34,20 @@ def placeholders(values: Sequence[int], prefix: str) -> tuple[str, MySQLValues]:
     return sql, dict(zip(names, values, strict=True))
 
 
+# Far past any real listing; a page beyond it would overflow the SQL OFFSET.
+_PAGE_MAX = 1_000_000
+
+
 def offset(page: int, size: int) -> int:
-    return max(page, 0) * size
+    return min(max(page, 0), _PAGE_MAX) * size
+
+
+def like_prefix(text: str) -> str:
+    """A LIKE pattern matching `text` literally at the start."""
+
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    return f"{escaped}%"
 
 
 def page_sql(

@@ -20,7 +20,6 @@ from poltergeist_core.services import users
 from poltergeist_core.services._common import AbstractContext
 from poltergeist_core.services._common import ServiceError
 from poltergeist_core.services._common import is_error
-from poltergeist_core.services.auth import Session
 
 _FEATURES = {
     "none": SendFeature.STAR,
@@ -87,7 +86,7 @@ async def _user(ctx: AbstractContext, args: Sequence[str]) -> User | None:
 
 
 async def _rate(
-    ctx: AbstractContext, session: Session, level_id: int, args: Sequence[str]
+    ctx: AbstractContext, actor: User, level_id: int, args: Sequence[str]
 ) -> str:
     level = await _level(ctx, level_id, ())
     stars = _integer(args[0]) if args else None
@@ -99,7 +98,7 @@ async def _rate(
 
     result = await moderation.rate_level(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         level_id=level.id,
         stars=stars,
         feature=feature,
@@ -112,7 +111,7 @@ async def _rate(
     return f"Rated {result.name} {result.stars} stars."
 
 
-async def _unrate(ctx: AbstractContext, session: Session, level_id: int) -> str:
+async def _unrate(ctx: AbstractContext, actor: User, level_id: int) -> str:
     level = await _level(ctx, level_id, ())
 
     if level is None:
@@ -120,7 +119,7 @@ async def _unrate(ctx: AbstractContext, session: Session, level_id: int) -> str:
 
     result = await moderation.rate_level(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         level_id=level.id,
         stars=0,
         feature=None,
@@ -134,7 +133,7 @@ async def _unrate(ctx: AbstractContext, session: Session, level_id: int) -> str:
 
 
 async def _feature(
-    ctx: AbstractContext, session: Session, level_id: int, args: Sequence[str]
+    ctx: AbstractContext, actor: User, level_id: int, args: Sequence[str]
 ) -> str:
     level = await _level(ctx, level_id, ())
     feature = _FEATURES.get(args[0].lower()) if args else None
@@ -147,7 +146,7 @@ async def _feature(
 
     result = await moderation.rate_level(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         level_id=level.id,
         stars=level.stars,
         feature=feature,
@@ -161,7 +160,7 @@ async def _feature(
 
 
 async def _demon(
-    ctx: AbstractContext, session: Session, level_id: int, args: Sequence[str]
+    ctx: AbstractContext, actor: User, level_id: int, args: Sequence[str]
 ) -> str:
     level = await _level(ctx, level_id, ())
     tier = _DEMONS.get(args[0].lower()) if args else None
@@ -171,7 +170,7 @@ async def _demon(
 
     result = await moderation.rate_level(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         level_id=level.id,
         stars=10,
         feature=None,
@@ -186,7 +185,7 @@ async def _demon(
 
 async def _schedule(
     ctx: AbstractContext,
-    session: Session,
+    actor: User,
     level_id: int,
     args: Sequence[str],
     timely_type: TimelyType,
@@ -197,7 +196,7 @@ async def _schedule(
         return "Use this command on a level or give a level id."
 
     result = await timely.schedule(
-        ctx, actor_user_id=session.user.id, timely_type=timely_type, level_id=level.id
+        ctx, actor_user_id=actor.id, timely_type=timely_type, level_id=level.id
     )
 
     if is_error(result):
@@ -206,18 +205,16 @@ async def _schedule(
     return f"Scheduled {level.name} as {timely_type.name.lower()} #{result.sequence}."
 
 
-async def _edit_any(
-    ctx: AbstractContext, session: Session, level_id: int
-) -> Level | str:
+async def _edit_any(ctx: AbstractContext, actor: User, level_id: int) -> Level | str:
     level = await _level(ctx, level_id, ())
 
     if level is None:
         return "Use this command on a level."
 
-    is_owner = level.user_id == session.user.id
+    is_owner = level.user_id == actor.id
 
     if not is_owner and not await ctx.permissions.has(
-        session.user.id, Permission.LEVELS_EDIT_ANY
+        actor.id, Permission.LEVELS_EDIT_ANY
     ):
         return "You may not edit this level."
 
@@ -225,9 +222,9 @@ async def _edit_any(
 
 
 async def _set_visibility(
-    ctx: AbstractContext, session: Session, level_id: int, visibility: Visibility
+    ctx: AbstractContext, actor: User, level_id: int, visibility: Visibility
 ) -> str:
-    level = await _edit_any(ctx, session, level_id)
+    level = await _edit_any(ctx, actor, level_id)
 
     if isinstance(level, str):
         return level
@@ -236,7 +233,7 @@ async def _set_visibility(
 
     await _audit.record(
         ctx,
-        session.user.id,
+        actor.id,
         "visibility",
         ModTarget.LEVEL,
         level.id,
@@ -247,9 +244,9 @@ async def _set_visibility(
 
 
 async def _set_lock(
-    ctx: AbstractContext, session: Session, level_id: int, *, locked: bool
+    ctx: AbstractContext, actor: User, level_id: int, *, locked: bool
 ) -> str:
-    level = await _edit_any(ctx, session, level_id)
+    level = await _edit_any(ctx, actor, level_id)
 
     if isinstance(level, str):
         return level
@@ -259,26 +256,26 @@ async def _set_lock(
     return f"{level.name} is now {'locked' if locked else 'unlocked'} for updates."
 
 
-async def _delete(ctx: AbstractContext, session: Session, level_id: int) -> str:
+async def _delete(ctx: AbstractContext, actor: User, level_id: int) -> str:
     level = await _level(ctx, level_id, ())
 
     if level is None:
         return "Use this command on a level."
 
-    if level.user_id != session.user.id and not await ctx.permissions.has(
-        session.user.id, Permission.LEVELS_DELETE_ANY
+    if level.user_id != actor.id and not await ctx.permissions.has(
+        actor.id, Permission.LEVELS_DELETE_ANY
     ):
         return "You may not delete this level."
 
     await ctx.levels.soft_delete(level.id)
-    await _audit.record(ctx, session.user.id, "delete", ModTarget.LEVEL, level.id)
+    await _audit.record(ctx, actor.id, "delete", ModTarget.LEVEL, level.id)
 
     await ctx.events.publish(
         LevelDeleted(
             level_id=level.id,
             level_name=level.name,
             user_id=level.user_id,
-            actor_user_id=session.user.id,
+            actor_user_id=actor.id,
         )
     )
 
@@ -286,7 +283,7 @@ async def _delete(ctx: AbstractContext, session: Session, level_id: int) -> str:
 
 
 async def _move(
-    ctx: AbstractContext, session: Session, level_id: int, args: Sequence[str]
+    ctx: AbstractContext, actor: User, level_id: int, args: Sequence[str]
 ) -> str:
     level = await _level(ctx, level_id, ())
 
@@ -300,7 +297,7 @@ async def _move(
 
     result = await moderation.move_level(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         level_id=level.id,
         target_user_id=target.id,
     )
@@ -321,7 +318,7 @@ def _ban_type(value: str | None) -> BanType | None:
         return None
 
 
-async def _ban(ctx: AbstractContext, session: Session, args: Sequence[str]) -> str:
+async def _ban(ctx: AbstractContext, actor: User, args: Sequence[str]) -> str:
     target = await _user(ctx, args)
     ban_type = _ban_type(args[1]) if len(args) > 1 else None
 
@@ -346,7 +343,7 @@ async def _ban(ctx: AbstractContext, session: Session, args: Sequence[str]) -> s
 
     result = await moderation.ban(
         ctx,
-        actor_user_id=session.user.id,
+        actor_user_id=actor.id,
         target_user_id=target.id,
         ban_type=ban_type,
         days=days,
@@ -361,7 +358,7 @@ async def _ban(ctx: AbstractContext, session: Session, args: Sequence[str]) -> s
     return f"Banned {target.username} ({ban_type.value}) {duration}."
 
 
-async def _unban(ctx: AbstractContext, session: Session, args: Sequence[str]) -> str:
+async def _unban(ctx: AbstractContext, actor: User, args: Sequence[str]) -> str:
     target = await _user(ctx, args)
     ban_type = _ban_type(args[1]) if len(args) > 1 else None
 
@@ -372,7 +369,7 @@ async def _unban(ctx: AbstractContext, session: Session, args: Sequence[str]) ->
         )
 
     result = await moderation.unban(
-        ctx, actor_user_id=session.user.id, target_user_id=target.id, ban_type=ban_type
+        ctx, actor_user_id=actor.id, target_user_id=target.id, ban_type=ban_type
     )
 
     if is_error(result):
@@ -381,12 +378,12 @@ async def _unban(ctx: AbstractContext, session: Session, args: Sequence[str]) ->
     return f"Lifted {result} {ban_type.value} ban(s) from {target.username}."
 
 
-async def _colour(ctx: AbstractContext, session: Session, args: Sequence[str]) -> str:
-    if not await ctx.permissions.has(session.user.id, Permission.COMMENTS_COLOUR):
+async def _colour(ctx: AbstractContext, actor: User, args: Sequence[str]) -> str:
+    if not await ctx.permissions.has(actor.id, Permission.COMMENTS_COLOUR):
         return "You may not set a comment colour."
 
     if args and args[0].lower() == "none":
-        await ctx.users.update_comment_colour(session.user.id, None)
+        await ctx.users.update_comment_colour(actor.id, None)
 
         return "Comment colour cleared."
 
@@ -398,15 +395,13 @@ async def _colour(ctx: AbstractContext, session: Session, args: Sequence[str]) -
         return "Usage: colour <r> <g> <b> or colour none."
 
     red, green, blue = (int(c) for c in channels if c is not None)
-    await ctx.users.update_comment_colour(
-        session.user.id, (red << 16) | (green << 8) | blue
-    )
+    await ctx.users.update_comment_colour(actor.id, (red << 16) | (green << 8) | blue)
 
     return f"Comment colour set to {red},{green},{blue}."
 
 
 async def _role(
-    ctx: AbstractContext, session: Session, args: Sequence[str], *, grant: bool
+    ctx: AbstractContext, actor: User, args: Sequence[str], *, grant: bool
 ) -> str:
     target = await _user(ctx, args)
 
@@ -416,7 +411,7 @@ async def _role(
     if grant:
         result = await roles.assign(
             ctx,
-            actor_user_id=session.user.id,
+            actor_user_id=actor.id,
             target_user_id=target.id,
             role_name=args[1],
             expires_at=None,
@@ -424,7 +419,7 @@ async def _role(
     else:
         result = await roles.revoke(
             ctx,
-            actor_user_id=session.user.id,
+            actor_user_id=actor.id,
             target_user_id=target.id,
             role_name=args[1],
         )
@@ -455,7 +450,7 @@ async def _whois(ctx: AbstractContext, args: Sequence[str]) -> str:
 
 
 async def execute(
-    ctx: AbstractContext, session: Session, content: str, level_id: int
+    ctx: AbstractContext, actor: User, content: str, level_id: int
 ) -> str:
     """Runs a command typed into a level comment and returns the reply shown to
     the player."""
@@ -476,36 +471,36 @@ async def execute(
         case "whois":
             return await _whois(ctx, args)
         case "rate":
-            return await _rate(ctx, session, level_id, args)
+            return await _rate(ctx, actor, level_id, args)
         case "unrate":
-            return await _unrate(ctx, session, level_id)
+            return await _unrate(ctx, actor, level_id)
         case "feature":
-            return await _feature(ctx, session, level_id, args)
+            return await _feature(ctx, actor, level_id, args)
         case "demon":
-            return await _demon(ctx, session, level_id, args)
+            return await _demon(ctx, actor, level_id, args)
         case "daily" | "weekly" | "event":
-            return await _schedule(ctx, session, level_id, args, _TIMELY[name])
+            return await _schedule(ctx, actor, level_id, args, _TIMELY[name])
         case "delete":
-            return await _delete(ctx, session, level_id)
+            return await _delete(ctx, actor, level_id)
         case "unlist":
-            return await _set_visibility(ctx, session, level_id, Visibility.UNLISTED)
+            return await _set_visibility(ctx, actor, level_id, Visibility.UNLISTED)
         case "relist":
-            return await _set_visibility(ctx, session, level_id, Visibility.PUBLIC)
+            return await _set_visibility(ctx, actor, level_id, Visibility.PUBLIC)
         case "lock":
-            return await _set_lock(ctx, session, level_id, locked=True)
+            return await _set_lock(ctx, actor, level_id, locked=True)
         case "unlock":
-            return await _set_lock(ctx, session, level_id, locked=False)
+            return await _set_lock(ctx, actor, level_id, locked=False)
         case "move":
-            return await _move(ctx, session, level_id, args)
+            return await _move(ctx, actor, level_id, args)
         case "ban":
-            return await _ban(ctx, session, args)
+            return await _ban(ctx, actor, args)
         case "unban":
-            return await _unban(ctx, session, args)
+            return await _unban(ctx, actor, args)
         case "colour" | "color":
-            return await _colour(ctx, session, args)
+            return await _colour(ctx, actor, args)
         case "role":
-            return await _role(ctx, session, args, grant=True)
+            return await _role(ctx, actor, args, grant=True)
         case "unrole":
-            return await _role(ctx, session, args, grant=False)
+            return await _role(ctx, actor, args, grant=False)
         case _:
             return f"Unknown command {name}. Try {settings.APP_COMMAND_PREFIX}help."

@@ -8,6 +8,7 @@ from gdformat.enums import Visibility
 from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.adapters.mysql import MySQLValue
 from poltergeist_core.resources._common import Model
+from poltergeist_core.resources._common import like_prefix
 from poltergeist_core.resources._common import offset
 from poltergeist_core.resources._common import page_sql
 from poltergeist_core.resources._common import placeholders
@@ -134,7 +135,7 @@ def _where_sql(
             clauses.append(f"l.user_id IN ({sql})")
 
     if search.name_prefix is not None:
-        values["name_pattern"] = f"{search.name_prefix}%"
+        values["name_pattern"] = like_prefix(search.name_prefix)
         clauses.append("l.name LIKE %(name_pattern)s")
 
     if search.difficulties is not None:

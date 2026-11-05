@@ -62,7 +62,10 @@ Each message is one JSON object:
 An event is published only after the transaction that produced it has
 committed, so a consumer that reads the database on receipt sees the rows.
 A request that is refused publishes nothing. Pub/Sub is fire-and-forget: a
-consumer that is offline misses the message.
+consumer that is offline misses the message. Every envelope is also appended
+to the Redis stream `events:recent` (field `envelope`, capped at roughly 2000
+entries), so a reader that starts late can catch up with
+`XRANGE events:recent (<last id> +`; the website's live feed reads it that way.
 
 | kind | data |
 |---|---|

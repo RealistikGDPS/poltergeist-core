@@ -8,6 +8,7 @@ from poltergeist_core.adapters.mysql import ImplementsMySQL
 from poltergeist_core.adapters.redis import RedisClient
 from poltergeist_core.adapters.storage import ImplementsStorage
 from poltergeist_core.resources import AccountCommentRepository
+from poltergeist_core.resources import ActivityRepository
 from poltergeist_core.resources import AnalyticsRepository
 from poltergeist_core.resources import ArtistRepository
 from poltergeist_core.resources import BanRepository
@@ -38,6 +39,7 @@ from poltergeist_core.resources import MessageRepository
 from poltergeist_core.resources import ModActionRepository
 from poltergeist_core.resources import PermissionRepository
 from poltergeist_core.resources import PlatformerScoreRepository
+from poltergeist_core.resources import PresenceRepository
 from poltergeist_core.resources import QuestRepository
 from poltergeist_core.resources import RateLimitRepository
 from poltergeist_core.resources import ReportRepository
@@ -118,6 +120,14 @@ class AbstractContext(ABC):
     @property
     def users(self) -> UserRepository:
         return UserRepository(self._mysql)
+
+    @property
+    def activity(self) -> ActivityRepository:
+        return ActivityRepository(self._redis)
+
+    @property
+    def presence(self) -> PresenceRepository:
+        return PresenceRepository(self._redis)
 
     @property
     def analytics(self) -> AnalyticsRepository:
